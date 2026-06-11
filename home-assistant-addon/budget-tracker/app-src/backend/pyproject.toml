@@ -1,0 +1,25 @@
+[project]
+name = "budget-tracker-backend"
+version = "0.1.0"
+description = "Private household budgeting backend"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115.0",
+  "python-multipart>=0.0.9",
+  "python-dotenv>=1.0.0",
+  "sqlalchemy>=2.0.30",
+  "uvicorn[standard]>=0.30.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.27.0",
+  "pytest>=8.2.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["app/tests"]
+pythonpath = ["."]
+
+[tool.setuptools.packages.find]
+include = ["app*"]

@@ -1,0 +1,21 @@
+name: Budget Tracker
+slug: budget_tracker
+version: "0.3.0"
+description: Self-hosted family budgeting app for monthly income, outgoings, savings, and debts.
+arch:
+  - amd64
+  - aarch64
+  - armv7
+startup: services
+boot: auto
+init: false
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:cash-multiple
+panel_title: Budget
+options:
+  max_upload_mb: 10
+  google_ai_api_key: ""
+schema:
+  max_upload_mb: "int(1,100)"
+  google_ai_api_key: "password?"

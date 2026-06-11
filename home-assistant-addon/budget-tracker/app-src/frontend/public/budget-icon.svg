@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Budget Tracker icon">
+  <defs>
+    <linearGradient id="bg" x1="40" x2="216" y1="28" y2="228" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7bd3ba"/>
+      <stop offset="1" stop-color="#205c4f"/>
+    </linearGradient>
+    <linearGradient id="card" x1="72" x2="184" y1="70" y2="190" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e6f5eb"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="56" fill="url(#bg)"/>
+  <path fill="#12352d" opacity=".16" d="M58 190c28 22 76 31 121 15 29-11 49-34 55-62v57c0 19-15 34-34 34H56c-19 0-34-15-34-34v-28c8 3 20 9 36 18z"/>
+  <rect x="58" y="48" width="140" height="160" rx="24" fill="url(#card)"/>
+  <rect x="78" y="76" width="72" height="12" rx="6" fill="#205c4f"/>
+  <rect x="78" y="106" width="100" height="10" rx="5" fill="#7aa99b"/>
+  <rect x="78" y="132" width="78" height="10" rx="5" fill="#7aa99b"/>
+  <rect x="78" y="158" width="94" height="10" rx="5" fill="#7aa99b"/>
+  <circle cx="172" cy="82" r="17" fill="#205c4f"/>
+  <path d="M166 82h13M172.5 75.5v13" stroke="#e6f5eb" stroke-width="6" stroke-linecap="round"/>
+  <path d="M58 190c26 16 56 20 87 11 22-7 40-20 53-39v22c0 13-11 24-24 24H82c-13 0-24-11-24-24v6z" fill="#205c4f" opacity=".12"/>
+</svg>
