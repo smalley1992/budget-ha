@@ -152,6 +152,12 @@
       </section>
 
       <section>
+        <h2>Prompt Template</h2>
+        <p>Edit the instructions sent to the AI. Use <code>{{PERIOD}}</code> and <code>{{CONTEXT}}</code> as dynamic placeholders.</p>
+        <textarea id="promptTemplate" style="width: 100%; min-height: 250px; font-family: monospace; font-size: 13px; line-height: 1.5; border: 1px solid #cbd7d1; border-radius: 6px; padding: 10px;"></textarea>
+      </section>
+
+      <section>
         <h2>Results</h2>
         <p id="status">No document parsed yet.</p>
         <div id="results"></div>
@@ -230,16 +236,14 @@
         return btoa(binary);
       }
 
-      function prompt(period) {
-        const contextJson = JSON.stringify(sampleContext);
-        return `You extract budget entries from one uploaded UK household finance document: a bill, receipt, or bank statement.
+      const defaultPromptTemplate = `You extract budget entries from one uploaded UK household finance document: a bill, receipt, or bank statement.
 
 Return strict JSON only. Do not include markdown.
 
-Current month: ${period}
+Current month: {{PERIOD}}
 Current view: combined
 Known app context:
-${contextJson}
+{{CONTEXT}}
 
 Output shape:
 {
@@ -252,7 +256,7 @@ Output shape:
       "action": "create|update_existing|ignore",
       "item_kind": "budget|income",
       "user_id": "alex",
-      "period": "${period}",
+      "period": "{{PERIOD}}",
       "type": "bill|expense|savings_contribution|debt_payment or null for income",
       "name": "short label",
       "amount": 0.0,
@@ -282,6 +286,12 @@ Rules:
 - If uncertain, still propose the best classification but lower confidence.
 - Ignore pending balances, brought-forward balances, account numbers, sort codes, and non-transaction text.
 - Never return secrets, account numbers, sort codes, full card numbers, or access tokens.`;
+
+      function extractJson(text) {
+        const trimmed = text.trim();
+        const match = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+        const jsonText = match ? match[1].trim() : trimmed;
+        return JSON.parse(jsonText);
       }
 
       function renderResults() {
@@ -376,15 +386,20 @@ Rules:
             mimeType = types[ext] || "application/octet-stream";
           }
 
+          const template = document.getElementById("promptTemplate").value;
+          const compiledPrompt = template
+            .replace(/\{\{PERIOD\}\}/g, period)
+            .replace(/\{\{CONTEXT\}\}/g, JSON.stringify(sampleContext));
+
           const body = {
-            contents: [{ role: "user", parts: [{ text: prompt(period) }, { inlineData: { mimeType: mimeType, data: base64 } }] }],
+            contents: [{ role: "user", parts: [{ text: compiledPrompt }, { inlineData: { mimeType: mimeType, data: base64 } }] }],
             generationConfig: { temperature: 0.1, maxOutputTokens: 4096, responseMimeType: "application/json" },
           };
           const requestBody = JSON.stringify(body);
           log("Request prepared", {
             endpoint: `https://generativelanguage.googleapis.com/v1beta/${resolvedModel}:generateContent`,
             bodyBytes: new Blob([requestBody]).size,
-            promptChars: body.contents[0].parts[0].text.length,
+            promptChars: compiledPrompt.length,
             inlineMimeType: mimeType,
           });
 
@@ -431,7 +446,7 @@ Rules:
 
           let parsed;
           try {
-            parsed = JSON.parse(text.replace(/^```json\s*|\s*```$/g, ""));
+            parsed = extractJson(text);
           } catch (error) {
             setStatus("Model response was not valid proposal JSON.");
             log("Proposal JSON parse failed", {
@@ -482,6 +497,7 @@ Rules:
         log("Log copied to clipboard");
       });
 
+      document.getElementById("promptTemplate").value = defaultPromptTemplate;
       renderDb();
     </script>
   </body>
