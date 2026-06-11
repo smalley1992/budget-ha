@@ -74,7 +74,7 @@ Rules:
 - Create one proposal per real transaction or bill total, not per OCR line.
 - Amounts are positive GBP values.
 - For bank statement money out, use budget item_kind.
-- For salary/refunds/money in, use income item_kind.
+- For salary/refunds/money in, payslips, or salary statements, use income item_kind (do not categorize payslips under budget item_kind or bills).
 - If the document is a bill with one total due, create or update one bill line.
 - For utility bills (e.g. energy bills like Octopus) or recurring bills paid by Direct Debit, extract the regular monthly Direct Debit / collection payment amount rather than the closing account balance or total outstanding account balance.
 - If an existing budget line looks like the same obligation, set action to update_existing and match_existing_line_id.
