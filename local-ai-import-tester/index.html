@@ -4,6 +4,10 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Budget AI Import Tester</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    </script>
     <style>
       :root {
         color: #18221e;
@@ -227,6 +231,26 @@
         return model.startsWith("models/") ? model : `models/${model}`;
       }
 
+      async function convertPdfToImage(arrayBuffer) {
+        log("Converting PDF to JPEG image locally...");
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        log(`PDF loaded. Total pages: ${pdf.numPages}. Rendering page 1...`);
+        const page = await pdf.getPage(1);
+        
+        const viewport = page.getViewport({ scale: 1.5 });
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        
+        await page.render({ canvasContext: context, viewport: viewport }).promise;
+        log("PDF page rendered to canvas.");
+        
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+        const base64 = dataUrl.split(",")[1];
+        return { base64, mimeType: "image/jpeg" };
+      }
+
       function arrayBufferToBase64(buffer) {
         const bytes = new Uint8Array(buffer);
         let binary = "";
@@ -370,9 +394,6 @@ Rules:
           const data = await file.arrayBuffer();
           log("File read complete", { bytes: data.byteLength });
 
-          const base64 = arrayBufferToBase64(data);
-          log("File encoded for request", { base64Length: base64.length });
-
           let mimeType = file.type;
           if (!mimeType) {
             const ext = "." + (file.name || "").split(".").pop().toLowerCase();
@@ -385,6 +406,22 @@ Rules:
             };
             mimeType = types[ext] || "application/octet-stream";
           }
+
+          let base64;
+          if (mimeType === "application/pdf") {
+            try {
+              const result = await convertPdfToImage(data);
+              base64 = result.base64;
+              mimeType = result.mimeType;
+            } catch (pdfError) {
+              setStatus("Failed to render PDF to image locally.");
+              log("PDF conversion error", pdfError instanceof Error ? pdfError.message : String(pdfError));
+              return;
+            }
+          } else {
+            base64 = arrayBufferToBase64(data);
+          }
+          log("File prepared for request", { base64Length: base64.length, finalMimeType: mimeType });
 
           const template = document.getElementById("promptTemplate").value;
           const compiledPrompt = template
