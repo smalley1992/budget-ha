@@ -135,8 +135,11 @@
           <input id="apiKey" type="password" placeholder="Google AI Studio API key" autocomplete="off" />
           <input id="period" value="2026-06" />
           <select id="model">
-            <option value="gemma-4-31b-it">gemma-4-31b-it</option>
-            <option value="models/gemma-4-31b-it">models/gemma-4-31b-it</option>
+            <option value="gemini-2.5-flash">gemini-2.5-flash (default)</option>
+            <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+            <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+            <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+            <option value="gemini-2.5-pro">gemini-2.5-pro</option>
           </select>
         </div>
         <div class="grid" style="margin-top: 10px">
@@ -226,11 +229,57 @@
       }
 
       function prompt(period) {
-        return `Extract UK budget entries from this document. Return strict JSON only with document_type, summary, and proposals.
-Each proposal has: source_text, date, action, item_kind, user_id, period, type, name, amount, status, paid_date, linked_debt_id, linked_savings_pot_id, match_existing_line_id, confidence, reasoning.
-Use one proposal per real transaction. Match existing lines by merchant similarity and amount within £1.50. Existing "Water" 52 and document "North Water" 51.99 is likely the same line. MBNA/card payments are debt_payment. Ignore account numbers and sort codes.
-Period: ${period}
-Context: ${JSON.stringify(sampleContext)}`;
+        const contextJson = JSON.stringify(sampleContext);
+        return `You extract budget entries from one uploaded UK household finance document: a bill, receipt, or bank statement.
+
+Return strict JSON only. Do not include markdown.
+
+Current month: ${period}
+Current view: combined
+Known app context:
+${contextJson}
+
+Output shape:
+{
+  "document_type": "bill|receipt|bank_statement|unknown",
+  "summary": "short plain English summary",
+  "proposals": [
+    {
+      "source_text": "merchant or statement text that caused this line",
+      "date": "YYYY-MM-DD or null",
+      "action": "create|update_existing|ignore",
+      "item_kind": "budget|income",
+      "user_id": "alex",
+      "period": "${period}",
+      "type": "bill|expense|savings_contribution|debt_payment or null for income",
+      "name": "short label",
+      "amount": 0.0,
+      "status": "paid|planned",
+      "paid_date": "YYYY-MM-DD or null",
+      "linked_debt_id": null,
+      "linked_savings_pot_id": null,
+      "match_existing_line_id": null,
+      "confidence": 0.0,
+      "reasoning": "one sentence"
+    }
+  ]
+}
+
+Rules:
+- Create one proposal per real transaction or bill total, not per OCR line.
+- Amounts are positive GBP values.
+- For bank statement money out, use budget item_kind.
+- For salary/refunds/money in, use income item_kind.
+- If the document is a bill with one total due, create or update one bill line.
+- If an existing budget line looks like the same obligation, set action to update_existing and match_existing_line_id.
+- A same obligation can be an approximate merchant match plus amount within £1.50. Example: existing "Water" 52 and document "North Water" 51.99 is likely the same line.
+- Payments to credit cards, lenders, or names like MBNA, Barclaycard, Capital One, Amex, Mastercard, Visa are usually type debt_payment. Link to a matching debt if present.
+- Transfers to savings accounts or pots are usually savings_contribution. Link to a matching savings pot if present.
+- Groceries, retail, food, fuel, travel, and card purchases are usually expense.
+- Utilities, council tax, rent, mortgage, insurance, phone, broadband, subscriptions are usually bill.
+- If uncertain, still propose the best classification but lower confidence.
+- Ignore pending balances, brought-forward balances, account numbers, sort codes, and non-transaction text.
+- Never return secrets, account numbers, sort codes, full card numbers, or access tokens.`;
       }
 
       function renderResults() {
@@ -312,8 +361,21 @@ Context: ${JSON.stringify(sampleContext)}`;
           const base64 = arrayBufferToBase64(data);
           log("File encoded for request", { base64Length: base64.length });
 
+          let mimeType = file.type;
+          if (!mimeType) {
+            const ext = "." + (file.name || "").split(".").pop().toLowerCase();
+            const types = {
+              ".jpg": "image/jpeg",
+              ".jpeg": "image/jpeg",
+              ".png": "image/png",
+              ".webp": "image/webp",
+              ".pdf": "application/pdf",
+            };
+            mimeType = types[ext] || "application/octet-stream";
+          }
+
           const body = {
-            contents: [{ role: "user", parts: [{ text: prompt(period) }, { inlineData: { mimeType: file.type, data: base64 } }] }],
+            contents: [{ role: "user", parts: [{ text: prompt(period) }, { inlineData: { mimeType: mimeType, data: base64 } }] }],
             generationConfig: { temperature: 0.1, maxOutputTokens: 4096, responseMimeType: "application/json" },
           };
           const requestBody = JSON.stringify(body);
@@ -321,7 +383,7 @@ Context: ${JSON.stringify(sampleContext)}`;
             endpoint: `https://generativelanguage.googleapis.com/v1beta/${resolvedModel}:generateContent`,
             bodyBytes: new Blob([requestBody]).size,
             promptChars: body.contents[0].parts[0].text.length,
-            inlineMimeType: file.type,
+            inlineMimeType: mimeType,
           });
 
           setStatus("Calling Google AI...");

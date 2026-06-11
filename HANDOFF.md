@@ -12,7 +12,7 @@ The app is implemented as:
 - Frontend: React, Vite, TypeScript
 - Storage: local SQLite database plus local uploads folder
 - No authentication yet
-- No AI scanning yet
+- AI scanning support added (disabled by default, uses Gemini API with gemini-2.5-flash as default model)
 - Home Assistant add-on wrapper exists and has been built/deployed by the user on their HA server
 
 Default users:
@@ -37,6 +37,7 @@ backend/
 frontend/
 data/
 uploads/
+local-ai-import-tester/  # Standalone client-only HTML budget AI import tester
 ```
 
 Home Assistant add-on:
@@ -80,6 +81,8 @@ UPLOAD_DIR
 MAX_UPLOAD_MB
 FRONTEND_ORIGIN
 FRONTEND_DIST_DIR
+GOOGLE_AI_API_KEY (fallback: GOOGLE_GENAI_API_KEY)
+GOOGLE_AI_MODEL (fallback: GOOGLE_GENAI_MODEL, defaults to gemini-2.5-flash)
 ```
 
 Debt/savings ledger rules are implemented:
@@ -255,3 +258,8 @@ Refresh HA add-on source:
 5. Add backup/export controls for the SQLite database and uploads.
 6. Consider Home Assistant Ingress later, but keep standalone web access working.
 7. Add receipt/bill AI scanning only after the core budgeting flow is stable.
+
+## AI Import & Local Tester
+
+- **Backend Integration**: Supports Google AI Studio (Gemini API) to scan bills/receipts. Uses `GOOGLE_AI_API_KEY` (or `GOOGLE_GENAI_API_KEY` as fallback) and `GOOGLE_AI_MODEL` (or `GOOGLE_GENAI_MODEL` as fallback, defaulting to `gemini-2.5-flash`).
+- **Local Tester**: The `local-ai-import-tester/index.html` is a standalone, client-only HTML page that makes direct CORS requests to Google AI Studio Gemini API using a user-specified API key and selected model. It uses the same structured JSON output shape and prompt rules as the backend service, making it easy to test prompts and model behavior without backend infrastructure.
