@@ -313,9 +313,23 @@ Rules:
 
       function extractJson(text) {
         const trimmed = text.trim();
+        
+        // 1. Try markdown code block extraction
         const match = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-        const jsonText = match ? match[1].trim() : trimmed;
-        return JSON.parse(jsonText);
+        if (match) {
+          return JSON.parse(match[1].trim());
+        }
+        
+        // 2. Try extracting the outer-most curly braces { ... }
+        const start = trimmed.indexOf("{");
+        const end = trimmed.lastIndexOf("}");
+        if (start !== -1 && end !== -1 && end > start) {
+          const jsonText = trimmed.substring(start, end + 1);
+          return JSON.parse(jsonText);
+        }
+        
+        // 3. Fallback to direct parsing
+        return JSON.parse(trimmed);
       }
 
       function renderResults() {
@@ -475,7 +489,10 @@ Rules:
             return;
           }
 
-          const text = payload.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "{}";
+          const parts = payload.candidates?.[0]?.content?.parts || [];
+          // Filter out parts marked as thought/reasoning
+          const cleanParts = parts.filter(part => !part.thought);
+          const text = cleanParts.map((part) => part.text || "").join("") || "{}";
           log("Model text extracted", {
             chars: text.length,
             finishReason: payload.candidates?.[0]?.finishReason || "(none)",
