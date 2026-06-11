@@ -45,6 +45,7 @@ type ModalState =
   | { kind: "saving" }
   | { kind: "profile"; userId: UserSlug }
   | { kind: "user" }
+  | { kind: "ai_import" }
   | null;
 
 function currentPeriod(): string {
@@ -139,6 +140,8 @@ export function App() {
   const [aiConfig, setAiConfig] = useState<AiImportConfig | null>(null);
   const [aiApiKey, setAiApiKey] = useState(() => localStorage.getItem("budget-tracker-ai-api-key") || "");
   const [aiReview, setAiReview] = useState<{ summary: string; documentType: string; proposals: AiImportProposal[] } | null>(null);
+  const [aiImportLoading, setAiImportLoading] = useState(false);
+  const [aiImportStatus, setAiImportStatus] = useState("");
 
   const [incomeForm, setIncomeForm] = useState({ name: "", amount: "", is_static: false });
   const [lineForm, setLineForm] = useState({ name: "", amount: "", due_day: "", is_static: false, linked_debt_id: "", linked_savings_pot_id: "" });
@@ -285,6 +288,49 @@ export function App() {
         resolve(newFile);
       }, "image/jpeg", 0.85);
     });
+  }
+
+  async function startAiImport(file: File) {
+    if (!aiConfig?.configured && !aiApiKey.trim()) {
+      window.alert("Please configure a Google AI API Key in the Settings panel or the Home Assistant Add-on configuration before uploading documents.");
+      return;
+    }
+    setAiImportLoading(true);
+    setAiImportStatus("Preparing document...");
+    try {
+      let fileToSend = file;
+      if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+        setAiImportStatus("Converting PDF locally to image...");
+        try {
+          fileToSend = await convertPdfToImageFile(file);
+        } catch (pdfError) {
+          throw new Error("Failed to convert PDF locally: " + (pdfError instanceof Error ? pdfError.message : String(pdfError)));
+        }
+      }
+      setAiImportStatus("Calling AI to analyze document...");
+      const preview = await api.previewAiImport(fileToSend, period, view, aiApiKey.trim());
+      setAiReview({
+        summary: preview.summary,
+        documentType: preview.document_type,
+        proposals: preview.proposals.map((proposal) => ({
+          ...proposal,
+          period: proposal.period || period,
+          user_id: proposal.user_id || users[0]?.id || "",
+          action: proposal.action || "create",
+          item_kind: proposal.item_kind || "budget",
+          type: proposal.item_kind === "income" ? null : proposal.type || "expense",
+          status: proposal.status || "paid",
+          amount: Number(proposal.amount || 0),
+          confidence: Number(proposal.confidence || 0),
+        })),
+      });
+      setModal(null);
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "Could not parse document");
+    } finally {
+      setAiImportLoading(false);
+      setAiImportStatus("");
+    }
   }
 
   async function previewAiImport(file: File) {
@@ -501,7 +547,7 @@ export function App() {
         <div className="fab-wrap">
           {addMenuOpen && (
             <div className="fab-menu">
-              <button onClick={() => { setAddMenuOpen(false); aiImportInputRef.current?.click(); }} style={{ fontWeight: "bold", borderBottom: "1px solid var(--border)" }}>Scan bill/statement</button>
+              <button onClick={() => { setAddMenuOpen(false); setModal({ kind: "ai_import" }); }} style={{ fontWeight: "bold", borderBottom: "1px solid var(--border)" }}>Upload doc</button>
               <button onClick={() => openModal({ kind: "income" })}>Income</button>
               <button onClick={() => openBudgetModal("bill", "Add bill")}>Bill</button>
               <button onClick={() => openBudgetModal("expense", "Add expense")}>Expense</button>
@@ -519,7 +565,7 @@ export function App() {
       )}
 
       {modal && (
-        <EntryModal title={modal.kind === "budget" ? (modal.title ?? `Add ${lineTypes.find((item) => item.id === modal.type)?.button}`) : modal.kind === "income" ? "Add income" : modal.kind === "debt" ? "Add debt account" : modal.kind === "saving" ? "Add savings pot" : modal.kind === "user" ? "Add family member" : "User profile"} onClose={() => setModal(null)}>
+        <EntryModal title={modal.kind === "budget" ? (modal.title ?? `Add ${lineTypes.find((item) => item.id === modal.type)?.button}`) : modal.kind === "income" ? "Add income" : modal.kind === "debt" ? "Add debt account" : modal.kind === "saving" ? "Add savings pot" : modal.kind === "user" ? "Add family member" : modal.kind === "ai_import" ? "Upload document" : "User profile"} onClose={() => setModal(null)}>
           {modal.kind === "income" && (
             <form
               className="modal-form"
@@ -660,6 +706,82 @@ export function App() {
               <p className="form-hint">Everyone added here is part of the same local family budget.</p>
               <button className="primary-button">Add family member</button>
             </form>
+          )}
+
+          {modal.kind === "ai_import" && (
+            <div className="modal-form" style={{ gap: "14px" }}>
+              {aiImportLoading ? (
+                <div style={{ textAlign: "center", padding: "30px 10px", display: "grid", gap: "16px", justifyItems: "center" }}>
+                  <div className="spinner" style={{
+                    width: "40px",
+                    height: "40px",
+                    border: "4px solid var(--border)",
+                    borderTopColor: "var(--accent)",
+                    borderRadius: "50%",
+                    animation: "spin 1s linear infinite"
+                  }}></div>
+                  <style>{`
+                    @keyframes spin {
+                      to { transform: rotate(360deg); }
+                    }
+                  `}</style>
+                  <strong style={{ fontSize: "16px", color: "var(--text)" }}>{aiImportStatus}</strong>
+                  <p style={{ color: "var(--muted)", margin: 0, fontSize: "13px" }}>Please wait while the document is being processed.</p>
+                </div>
+              ) : (
+                <div className="settings-list" style={{ gap: "12px" }}>
+                  {(!aiConfig?.configured && !aiApiKey.trim()) && (
+                    <div className="target-badge" style={{ display: "block", background: "rgba(245, 124, 0, 0.08)", borderColor: "rgba(245, 124, 0, 0.4)", color: "#b25e00", borderRadius: "8px", padding: "12px", marginBottom: "4px" }}>
+                      <strong>⚠️ API Key Required:</strong>
+                      <p style={{ margin: "4px 0 0", fontSize: "12px", lineHeight: "1.4" }}>
+                        Paste your Google AI API key below to upload documents. This key is stored securely in your browser.
+                      </p>
+                    </div>
+                  )}
+                  
+                  {(!aiConfig?.configured) && (
+                    <label className="settings-group">
+                      <span style={{ fontSize: "13px", color: "var(--muted)", fontWeight: "bold" }}>Google AI Studio API Key</span>
+                      <input
+                        type="password"
+                        placeholder="Paste your key here"
+                        value={aiApiKey}
+                        onChange={(event) => {
+                          const val = event.target.value;
+                          setAiApiKey(val);
+                          if (val.trim()) {
+                            localStorage.setItem("budget-tracker-ai-api-key", val.trim());
+                          } else {
+                            localStorage.removeItem("budget-tracker-ai-api-key");
+                          }
+                        }}
+                        autoComplete="off"
+                        style={{ width: "100%" }}
+                      />
+                    </label>
+                  )}
+
+                  <label className="upload-target" style={{ minHeight: "140px", flexDirection: "column", background: "var(--panel-soft)" }}>
+                    <FileSearch size={32} style={{ marginBottom: "6px" }} />
+                    <span style={{ fontWeight: "bold", textAlign: "center" }}>Select or drop a bill, receipt, or statement</span>
+                    <span style={{ fontSize: "12px", color: "var(--muted)", marginTop: "4px" }}>Supports PDF, JPG, PNG, WEBP (Max 10MB)</span>
+                    <input
+                      type="file"
+                      accept=".jpg,.jpeg,.png,.webp,.pdf"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.target.value = "";
+                        if (file) {
+                          void startAiImport(file);
+                        }
+                      }}
+                    />
+                  </label>
+                  
+                  <button className="icon-text" style={{ justifyContent: "center", minHeight: "42px", marginTop: "4px" }} onClick={() => setModal(null)}>Cancel</button>
+                </div>
+              )}
+            </div>
           )}
         </EntryModal>
       )}
