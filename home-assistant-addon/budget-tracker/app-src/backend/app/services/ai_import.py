@@ -107,22 +107,43 @@ Rules:
 
 def _extract_json(text: str) -> dict[str, Any]:
     trimmed = text.strip()
-    fenced = re.search(r"```(?:json)?\s*(.*?)```", trimmed, flags=re.DOTALL | re.IGNORECASE)
-    if fenced:
-        trimmed = fenced.group(1).strip()
+    
+    # 1. Try markdown code block extraction
+    match = re.search(r"```(?:json)?\s*([\s\S]*?)```", trimmed, flags=re.DOTALL | re.IGNORECASE)
+    if match:
+        json_text = match.group(1).strip()
+        try:
+            parsed = json.loads(json_text)
+            logger.info(f"Successfully extracted JSON from markdown block. proposals count: {len(parsed.get('proposals', []))}")
+            logger.info(f"AI Response Details: document_type={parsed.get('document_type')}, summary='{parsed.get('summary')}'")
+            return parsed
+        except json.JSONDecodeError:
+            logger.warning("Markdown block content was not valid JSON, trying curly braces fallback...")
+            
+    # 2. Try extracting the outer-most curly braces { ... }
+    start = trimmed.find("{")
+    end = trimmed.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        json_text = trimmed[start:end + 1]
+        try:
+            parsed = json.loads(json_text)
+            logger.info(f"Successfully extracted JSON from outermost curly braces. proposals count: {len(parsed.get('proposals', []))}")
+            logger.info(f"AI Response Details: document_type={parsed.get('document_type')}, summary='{parsed.get('summary')}'")
+            return parsed
+        except json.JSONDecodeError:
+            logger.warning("Outermost curly braces content was not valid JSON, trying direct parsing...")
+
+    # 3. Direct parsing fallback
     try:
         parsed = json.loads(trimmed)
+        logger.info(f"Successfully parsed raw text directly as JSON. proposals count: {len(parsed.get('proposals', []))}")
+        logger.info(f"AI Response Details: document_type={parsed.get('document_type')}, summary='{parsed.get('summary')}'")
+        return parsed
     except json.JSONDecodeError as exc:
         logger.error(f"AI response was not valid JSON: {str(exc)}")
-        logger.debug(f"Raw response text: {trimmed}")
+        snippet = trimmed[:1000] + "..." if len(trimmed) > 1000 else trimmed
+        logger.error(f"Raw response text snippet (first 1000 chars): {snippet}")
         raise HTTPException(status_code=502, detail="AI response was not valid JSON") from exc
-    if not isinstance(parsed, dict) or not isinstance(parsed.get("proposals"), list):
-        logger.error("AI response format invalid: missing dict or proposals list")
-        raise HTTPException(status_code=502, detail="AI response did not contain proposals")
-    
-    logger.info(f"Successfully extracted {len(parsed.get('proposals', []))} proposals from AI response.")
-    logger.info(f"AI Response Details: document_type={parsed.get('document_type')}, summary='{parsed.get('summary')}'")
-    return parsed
 
 
 def call_google_ai(api_key: str, model: str, prompt: str, mime_type: str, content: bytes) -> dict[str, Any]:
@@ -184,9 +205,11 @@ def call_google_ai(api_key: str, model: str, prompt: str, mime_type: str, conten
         raise HTTPException(status_code=502, detail="Google AI request failed") from exc
 
     parts = payload.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-    text = "".join(part.get("text", "") for part in parts if isinstance(part, dict))
+    # Filter out parts marked as thought/reasoning (where part.get("thought") is truthy)
+    clean_parts = [part for part in parts if isinstance(part, dict) and not part.get("thought")]
+    text = "".join(part.get("text", "") for part in clean_parts)
     if not text:
-        logger.error("AI response content candidate parts was empty.")
+        logger.error("AI response content candidate parts was empty after filtering thought blocks.")
         raise HTTPException(status_code=502, detail="Google AI returned no parse result")
     
     logger.info(f"AI response candidate text size: {len(text)} characters.")
