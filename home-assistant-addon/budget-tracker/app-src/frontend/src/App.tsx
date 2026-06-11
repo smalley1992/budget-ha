@@ -137,7 +137,7 @@ export function App() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const aiImportInputRef = useRef<HTMLInputElement | null>(null);
   const [aiConfig, setAiConfig] = useState<AiImportConfig | null>(null);
-  const [aiApiKey, setAiApiKey] = useState("");
+  const [aiApiKey, setAiApiKey] = useState(() => localStorage.getItem("budget-tracker-ai-api-key") || "");
   const [aiReview, setAiReview] = useState<{ summary: string; documentType: string; proposals: AiImportProposal[] } | null>(null);
 
   const [incomeForm, setIncomeForm] = useState({ name: "", amount: "", is_static: false });
@@ -256,14 +256,55 @@ export function App() {
     }, "Database restored");
   }
 
+  async function convertPdfToImageFile(file: File): Promise<File> {
+    const arrayBuffer = await file.arrayBuffer();
+    // @ts-ignore
+    const pdfjsLib = window.pdfjsLib;
+    if (!pdfjsLib) {
+      throw new Error("PDF.js library is not loaded.");
+    }
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 1.5 });
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("Could not get 2D context for canvas.");
+    }
+    canvas.height = viewport.height;
+    canvas.width = viewport.width;
+    await page.render({ canvasContext: context, viewport: viewport }).promise;
+    
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          reject(new Error("Could not convert PDF canvas to blob"));
+          return;
+        }
+        const newFile = new File([blob], file.name.replace(/\.pdf$/i, ".jpg"), { type: "image/jpeg" });
+        resolve(newFile);
+      }, "image/jpeg", 0.85);
+    });
+  }
+
   async function previewAiImport(file: File) {
     if (!aiConfig?.configured && !aiApiKey.trim()) {
-      setMessage("Add a Google AI key in app config or paste one for this session");
+      window.alert("Please configure a Google AI API Key in the Settings panel or the Home Assistant Add-on configuration before uploading documents.");
       return;
     }
     setBusy(true);
+    setMessage("Preparing document...");
     try {
-      const preview = await api.previewAiImport(file, period, view, aiApiKey.trim());
+      let fileToSend = file;
+      if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+        try {
+          fileToSend = await convertPdfToImageFile(file);
+        } catch (pdfError) {
+          throw new Error("Failed to convert PDF locally: " + (pdfError instanceof Error ? pdfError.message : String(pdfError)));
+        }
+      }
+      setMessage("Calling AI to analyze document...");
+      const preview = await api.previewAiImport(fileToSend, period, view, aiApiKey.trim());
       setAiReview({
         summary: preview.summary,
         documentType: preview.document_type,
@@ -460,6 +501,7 @@ export function App() {
         <div className="fab-wrap">
           {addMenuOpen && (
             <div className="fab-menu">
+              <button onClick={() => { setAddMenuOpen(false); aiImportInputRef.current?.click(); }} style={{ fontWeight: "bold", borderBottom: "1px solid var(--border)" }}>Scan bill/statement</button>
               <button onClick={() => openModal({ kind: "income" })}>Income</button>
               <button onClick={() => openBudgetModal("bill", "Add bill")}>Bill</button>
               <button onClick={() => openBudgetModal("expense", "Add expense")}>Expense</button>
@@ -697,7 +739,15 @@ export function App() {
                 type="password"
                 placeholder={aiConfig?.configured ? "Google AI key configured in HA" : "Paste Google AI key for this session"}
                 value={aiApiKey}
-                onChange={(event) => setAiApiKey(event.target.value)}
+                onChange={(event) => {
+                  const val = event.target.value;
+                  setAiApiKey(val);
+                  if (val.trim()) {
+                    localStorage.setItem("budget-tracker-ai-api-key", val.trim());
+                  } else {
+                    localStorage.removeItem("budget-tracker-ai-api-key");
+                  }
+                }}
                 autoComplete="off"
               />
               <button className="setting-row setting-action" disabled={busy} onClick={() => aiImportInputRef.current?.click()}>
@@ -846,6 +896,26 @@ export function App() {
                     )}
                   </div>
                   <p className="form-hint">{Math.round((proposal.confidence || 0) * 100)}% / {proposal.reasoning || proposal.source_text}</p>
+                  {(() => {
+                    if (proposal.item_kind === "income") {
+                      const duplicate = income.find((line) => line.name.toLowerCase() === proposal.name.toLowerCase());
+                      if (duplicate) {
+                        return <p className="form-hint warning-hint" style={{ color: "#b25e00", margin: "4px 0 0" }}>⚠️ An income line named "{duplicate.name}" ({money(duplicate.amount)}) already exists for this month.</p>;
+                      }
+                    } else {
+                      if (proposal.action === "update_existing" && proposal.match_existing_line_id) {
+                        const matched = lines.find((line) => line.id === proposal.match_existing_line_id);
+                        if (matched) {
+                          return <p className="form-hint match-hint" style={{ color: "#205c4f", margin: "4px 0 0" }}>🔄 Will update existing line: "{matched.name}" ({money(matched.amount)})</p>;
+                        }
+                      }
+                      const duplicate = lines.find((line) => line.name.toLowerCase() === proposal.name.toLowerCase() && line.id !== proposal.match_existing_line_id);
+                      if (duplicate) {
+                        return <p className="form-hint warning-hint" style={{ color: "#b25e00", margin: "4px 0 0" }}>⚠️ A budget line named "{duplicate.name}" ({money(duplicate.amount)}) already exists for this month.</p>;
+                      }
+                    }
+                    return null;
+                  })()}
                 </div>
               ))}
             </div>
