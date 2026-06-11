@@ -35,7 +35,10 @@ def _context_for_import(db: Session, period: str, view: str) -> dict:
             .filter(models.BudgetLine.month_id == month.id, models.BudgetLine.user_id.in_(visible_user_ids))
             .all()
         )
-        lines = [budget_line_out(db, row) for row in budget_rows]
+        for row in budget_rows:
+            data = budget_line_out(db, row)
+            data.pop("paid_date", None)
+            lines.append(data)
 
     debts = [debt_out(db, row) for row in db.query(models.Debt).filter(models.Debt.user_id.in_(visible_user_ids)).all()] if visible_user_ids else []
     savings = [savings_pot_out(db, row) for row in db.query(models.SavingsPot).filter(models.SavingsPot.user_id.in_(visible_user_ids)).all()] if visible_user_ids else []

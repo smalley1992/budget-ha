@@ -123,8 +123,9 @@ def call_google_ai(api_key: str, model: str, prompt: str, mime_type: str, conten
             "responseMimeType": "application/json",
         },
     }
+    model_path = model if model.startswith("models/") else f"models/{model}"
     request = urllib.request.Request(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+        f"https://generativelanguage.googleapis.com/v1beta/{model_path}:generateContent",
         data=json.dumps(body).encode("utf-8"),
         headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
         method="POST",
