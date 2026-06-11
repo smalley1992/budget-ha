@@ -82,7 +82,7 @@ MAX_UPLOAD_MB
 FRONTEND_ORIGIN
 FRONTEND_DIST_DIR
 GOOGLE_AI_API_KEY (fallback: GOOGLE_GENAI_API_KEY)
-GOOGLE_AI_MODEL (fallback: GOOGLE_GENAI_MODEL, defaults to gemini-2.5-flash)
+GOOGLE_AI_MODEL (fallback: GOOGLE_GENAI_MODEL, defaults to gemma-4-31b-it)
 ```
 
 Debt/savings ledger rules are implemented:
@@ -261,5 +261,5 @@ Refresh HA add-on source:
 
 ## AI Import & Local Tester
 
-- **Backend Integration**: Supports Google AI Studio (Gemini API) to scan bills/receipts. Uses `GOOGLE_AI_API_KEY` (or `GOOGLE_GENAI_API_KEY` as fallback) and `GOOGLE_AI_MODEL` (or `GOOGLE_GENAI_MODEL` as fallback, defaulting to `gemini-2.5-flash`).
+- **Backend Integration**: Supports Google AI Studio (Gemini API) to scan bills/receipts. Uses `GOOGLE_AI_API_KEY` (or `GOOGLE_GENAI_API_KEY` as fallback) and `GOOGLE_AI_MODEL` (or `GOOGLE_GENAI_MODEL` as fallback, defaulting to `gemma-4-31b-it`).
 - **Local Tester**: The `local-ai-import-tester/index.html` is a standalone, client-only HTML page that makes direct CORS requests to Google AI Studio Gemini API using a user-specified API key and selected model. It uses the same structured JSON output shape and prompt rules as the backend service, making it easy to test prompts and model behavior without backend infrastructure.
