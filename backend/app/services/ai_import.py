@@ -81,8 +81,8 @@ Rules:
 - A same obligation can be an approximate merchant match plus amount within £1.50. Example: existing "Water" 52 and document "North Water" 51.99 is likely the same line.
 - Payments to credit cards, lenders, or names like MBNA, Barclaycard, Capital One, Amex, Mastercard, Visa are usually type debt_payment. Link to a matching debt if present.
 - Transfers to savings accounts or pots are usually savings_contribution. Link to a matching savings pot if present.
-- Groceries, retail, food, fuel, travel, and card purchases are usually expense.
-- Utilities, council tax, rent, mortgage, insurance, phone, broadband, subscriptions are usually bill.
+- Groceries, retail, food, fuel, travel, subscriptions, and card purchases are usually expense.
+- Utilities, council tax, rent, mortgage, insurance, phone, broadband are usually bill.
 - If uncertain, still propose the best classification but lower confidence.
 - Ignore pending balances, brought-forward balances, account numbers, sort codes, and non-transaction text.
 - Never return secrets, account numbers, sort codes, full card numbers, or access tokens.
