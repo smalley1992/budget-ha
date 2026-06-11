@@ -76,6 +76,7 @@ Rules:
 - For bank statement money out, use budget item_kind.
 - For salary/refunds/money in, use income item_kind.
 - If the document is a bill with one total due, create or update one bill line.
+- For utility bills (e.g. energy bills like Octopus) or recurring bills paid by Direct Debit, extract the regular monthly Direct Debit / collection payment amount rather than the closing account balance or total outstanding account balance.
 - If an existing budget line looks like the same obligation, set action to update_existing and match_existing_line_id.
 - A same obligation can be an approximate merchant match plus amount within £1.50. Example: existing "Water" 52 and document "North Water" 51.99 is likely the same line.
 - Payments to credit cards, lenders, or names like MBNA, Barclaycard, Capital One, Amex, Mastercard, Visa are usually type debt_payment. Link to a matching debt if present.
