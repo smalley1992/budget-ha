@@ -343,7 +343,10 @@ Rules:
             <input value="${row.name || ""}" data-field="name" data-index="${index}" />
             <input type="number" step="0.01" value="${row.amount || 0}" data-field="amount" data-index="${index}" />
             <select data-field="type" data-index="${index}">
-              ${["bill", "expense", "savings_contribution", "debt_payment"].map((type) => `<option value="${type}" ${row.type === type ? "selected" : ""}>${type}</option>`).join("")}
+              ${["income", "bill", "expense", "savings_contribution", "debt_payment"].map((type) => {
+                const isSelected = (type === "income" && row.item_kind === "income") || (row.item_kind === "budget" && row.type === type);
+                return `<option value="${type}" ${isSelected ? "selected" : ""}>${type}</option>`;
+              }).join("")}
             </select>
             <select data-field="action" data-index="${index}">
               ${["create", "update_existing", "ignore"].map((action) => `<option value="${action}" ${row.action === action ? "selected" : ""}>${action}</option>`).join("")}
@@ -371,7 +374,18 @@ Rules:
         const field = event.target.dataset.field;
         const index = Number(event.target.dataset.index);
         if (!field || Number.isNaN(index)) return;
-        proposals[index][field] = field === "amount" ? Number(event.target.value || 0) : event.target.value;
+        if (field === "type") {
+          const val = event.target.value;
+          if (val === "income") {
+            proposals[index].item_kind = "income";
+            proposals[index].type = null;
+          } else {
+            proposals[index].item_kind = "budget";
+            proposals[index].type = val;
+          }
+        } else {
+          proposals[index][field] = field === "amount" ? Number(event.target.value || 0) : event.target.value;
+        }
       });
 
       document.getElementById("results").addEventListener("click", (event) => {
