@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
 
@@ -9,6 +11,8 @@ from ..services.serializers import budget_line_out, debt_out, savings_pot_out
 
 
 router = APIRouter(prefix="/api/ai-import", tags=["ai-import"])
+logger = logging.getLogger("app.ai_import")
+
 
 
 @router.get("/config")
@@ -60,12 +64,21 @@ async def preview_ai_import(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> dict:
+    logger.info(f"Received AI import preview request: period={period}, view={view}, filename={file.filename}")
     content = await file.read()
     mime_type = validate_ai_import_file(file, len(content))
     settings = get_settings()
     context = _context_for_import(db, period, view)
     prompt = build_import_prompt(period, view, context)
-    result = call_google_ai(api_key.strip() or settings.google_ai_api_key, settings.google_ai_model, prompt, mime_type, content)
+    
+    result = await asyncio.to_thread(
+        call_google_ai,
+        api_key.strip() or settings.google_ai_api_key,
+        settings.google_ai_model,
+        prompt,
+        mime_type,
+        content
+    )
     return {
         "document_type": result.get("document_type", "unknown"),
         "summary": result.get("summary", ""),

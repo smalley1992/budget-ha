@@ -54,4 +54,45 @@ def create_app() -> FastAPI:
     return app
 
 
+def setup_logging():
+    import logging
+    import sys
+
+    root_formatter = logging.Formatter(
+        "[%(asctime)s.%(msecs)03d] %(levelname)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
+    root_logger = logging.getLogger()
+    if not root_logger.handlers:
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(root_formatter)
+        root_logger.addHandler(handler)
+        root_logger.setLevel(logging.INFO)
+    else:
+        for handler in root_logger.handlers:
+            handler.setFormatter(root_formatter)
+
+    for name in ["uvicorn", "uvicorn.error", "uvicorn.access"]:
+        logger = logging.getLogger(name)
+        for handler in logger.handlers:
+            formatter = handler.formatter
+            if formatter:
+                cls = formatter.__class__
+                fmt = getattr(formatter, "_fmt", "")
+                if fmt and "%(asctime)s" not in fmt:
+                    new_fmt = "[%(asctime)s.%(msecs)03d] " + fmt
+                    try:
+                        kwargs = {}
+                        if hasattr(formatter, "use_colors"):
+                            kwargs["use_colors"] = formatter.use_colors
+                        kwargs["datefmt"] = "%Y-%m-%d %H:%M:%S"
+                        new_formatter = cls(fmt=new_fmt, **kwargs)
+                        handler.setFormatter(new_formatter)
+                    except Exception:
+                        handler.setFormatter(root_formatter)
+
+
+setup_logging()
 app = create_app()
+

@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import re
 import urllib.error
 import urllib.request
@@ -8,6 +9,8 @@ from typing import Any
 from fastapi import HTTPException, UploadFile
 
 from ..config import get_settings
+
+logger = logging.getLogger("app.ai_import")
 
 
 ALLOWED_AI_IMPORT_TYPES = {
@@ -22,17 +25,30 @@ ALLOWED_AI_IMPORT_TYPES = {
 def validate_ai_import_file(file: UploadFile, size_bytes: int) -> str:
     suffix = "." + (file.filename or "").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else ""
     mime_type = ALLOWED_AI_IMPORT_TYPES.get(suffix)
+    logger.info(f"Validating upload file: name={file.filename}, suffix={suffix}, size={size_bytes} bytes, MIME={file.content_type}")
     if mime_type is None:
+        logger.error(f"Validation failed: unsupported file type {suffix}")
         raise HTTPException(status_code=400, detail="Upload must be a PDF or image")
     if file.content_type != mime_type:
+        logger.error(f"Validation failed: MIME type mismatch (ext={mime_type}, content_type={file.content_type})")
         raise HTTPException(status_code=400, detail="File MIME type does not match its extension")
     max_bytes = get_settings().max_upload_mb * 1024 * 1024
     if size_bytes > max_bytes:
+        logger.error(f"Validation failed: File size {size_bytes} exceeds limit {max_bytes}")
         raise HTTPException(status_code=413, detail="File is too large")
+    logger.info("Validation successful")
     return mime_type
 
 
 def build_import_prompt(period: str, view: str, context: dict[str, Any]) -> str:
+    logger.info(f"Building import prompt: period={period}, view={view}")
+    logger.info(
+        f"Context summary: {len(context.get('existing_budget_lines', []))} budget lines, "
+        f"{len(context.get('users', []))} users, "
+        f"{len(context.get('categories', []))} categories, "
+        f"{len(context.get('debts', []))} debts, "
+        f"{len(context.get('savings_pots', []))} savings pots"
+    )
     context_json = json.dumps(context, ensure_ascii=False, separators=(",", ":"))
     return f"""
 You extract budget entries from one uploaded UK household finance document: a bill, receipt, or bank statement.
@@ -97,15 +113,24 @@ def _extract_json(text: str) -> dict[str, Any]:
     try:
         parsed = json.loads(trimmed)
     except json.JSONDecodeError as exc:
+        logger.error(f"AI response was not valid JSON: {str(exc)}")
+        logger.debug(f"Raw response text: {trimmed}")
         raise HTTPException(status_code=502, detail="AI response was not valid JSON") from exc
     if not isinstance(parsed, dict) or not isinstance(parsed.get("proposals"), list):
+        logger.error("AI response format invalid: missing dict or proposals list")
         raise HTTPException(status_code=502, detail="AI response did not contain proposals")
+    
+    logger.info(f"Successfully extracted {len(parsed.get('proposals', []))} proposals from AI response.")
+    logger.info(f"AI Response Details: document_type={parsed.get('document_type')}, summary='{parsed.get('summary')}'")
     return parsed
 
 
 def call_google_ai(api_key: str, model: str, prompt: str, mime_type: str, content: bytes) -> dict[str, Any]:
     if not api_key.strip():
+        logger.error("API key validation failed: empty API key.")
         raise HTTPException(status_code=400, detail="Google AI API key is required")
+    
+    logger.info(f"Preparing Google AI API request. Model: {model}, Mime: {mime_type}, Size: {len(content)} bytes")
     body = {
         "contents": [
             {
@@ -124,27 +149,45 @@ def call_google_ai(api_key: str, model: str, prompt: str, mime_type: str, conten
         },
     }
     model_path = model if model.startswith("models/") else f"models/{model}"
+    request_url = f"https://generativelanguage.googleapis.com/v1beta/{model_path}:generateContent"
+    
+    logger.info(f"Sending POST request to Generative Language API endpoint for model: {model}")
+    
+    import time
+    start_time = time.time()
+    
     request = urllib.request.Request(
-        f"https://generativelanguage.googleapis.com/v1beta/{model_path}:generateContent",
+        request_url,
         data=json.dumps(body).encode("utf-8"),
         headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
         method="POST",
     )
+    
     try:
         with urllib.request.urlopen(request, timeout=90) as response:
             payload = json.loads(response.read().decode("utf-8"))
+            elapsed = time.time() - start_time
+            logger.info(f"API request completed successfully in {elapsed:.2f} seconds.")
     except urllib.error.HTTPError as exc:
+        elapsed = time.time() - start_time
         try:
-            error_payload = json.loads(exc.read().decode("utf-8"))
+            error_body = exc.read().decode("utf-8")
+            error_payload = json.loads(error_body)
             message = error_payload.get("error", {}).get("message", "Google AI request failed")
         except Exception:
             message = "Google AI request failed"
+        logger.error(f"Google AI API request failed with HTTP status {exc.code} after {elapsed:.2f} seconds. Error: {message}")
         raise HTTPException(status_code=502, detail=message) from exc
     except (urllib.error.URLError, TimeoutError) as exc:
+        elapsed = time.time() - start_time
+        logger.error(f"Google AI API request failed/timed out after {elapsed:.2f} seconds: {str(exc)}")
         raise HTTPException(status_code=502, detail="Google AI request failed") from exc
 
     parts = payload.get("candidates", [{}])[0].get("content", {}).get("parts", [])
     text = "".join(part.get("text", "") for part in parts if isinstance(part, dict))
     if not text:
+        logger.error("AI response content candidate parts was empty.")
         raise HTTPException(status_code=502, detail="Google AI returned no parse result")
+    
+    logger.info(f"AI response candidate text size: {len(text)} characters.")
     return _extract_json(text)
