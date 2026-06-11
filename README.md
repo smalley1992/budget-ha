@@ -1,110 +1,32 @@
-# Budget Tracker
+# Budget Tracker Home Assistant Add-on Repository
 
-A self-hosted household and family budgeting app.
+This repository contains the Budget Tracker Home Assistant add-on.
 
-## What Is Included
+## Add To Home Assistant
 
-- FastAPI backend with SQLite
-- React + Vite + TypeScript frontend
-- Local file uploads for receipts and bills
-- First-run family member setup and local profile management
-- Monthly income, bills, expenses, savings contributions, debt payments, and combined family totals
-- Manual month rollover for static items
-- No authentication and no AI scanning in the MVP
-
-## Local Setup
-
-Backend:
-
-```powershell
-cd backend
-python -m venv .venv
-.\.venv\Scripts\python -m pip install -e ".[dev]"
-.\.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
-```
-
-Frontend:
-
-```powershell
-cd frontend
-npm install
-npm run dev
-```
-
-Open `http://localhost:5173`.
-
-## Configuration
-
-Copy `.env.example` to `.env` if you want to override defaults.
-
-- `DATABASE_URL`: defaults to `sqlite:///./data/budget_tracker.db`
-- `UPLOAD_DIR`: defaults to `./uploads`
-- `MAX_UPLOAD_MB`: defaults to `10`
-- `FRONTEND_ORIGIN`: defaults to `http://localhost:5173`
-- `FRONTEND_DIST_DIR`: optional path to a built frontend directory served by FastAPI
-
-Runtime data is intentionally local and should not be committed:
-
-- `data/budget_tracker.db`
-- `uploads/`
-- `snapshots/`
-
-## Docker
-
-```powershell
-docker compose up --build
-```
-
-Frontend: `http://localhost:5173`
-
-Backend API: `http://localhost:8000/api`
-
-## Home Assistant Add-on
-
-The project includes a local add-on package at:
+1. In Home Assistant, open **Settings > Add-ons > Add-on Store**.
+2. Open the three-dot menu and choose **Repositories**.
+3. Add this repository URL:
 
 ```text
-home-assistant-addon/budget-tracker
+https://github.com/smalley1992/budget-ha
 ```
 
-Refresh the packaged add-on source from the current app:
+4. Install **Budget Tracker** from the add-on store.
+5. Open it from the add-on page, or enable the sidebar entry in Home Assistant.
 
-```powershell
-.\scripts\package-home-assistant-addon.ps1
-```
+Fresh installs start empty. Open the app and create the first family member, then add more profiles from Settings.
 
-Then copy `home-assistant-addon/budget-tracker` into a Home Assistant local add-ons folder or add-on repository.
+## Data
 
-The add-on runs as its own web app on port `8099`:
+The add-on uses Home Assistant Ingress, so access is handled through Home Assistant's normal authentication and remote access path.
 
-```text
-http://homeassistant.local:8099
-```
+The add-on stores its SQLite database and uploads in Home Assistant's persistent add-on storage under `/data/budget-tracker`.
 
-The SQLite database and uploads are stored in the add-on's persistent `/data/budget-tracker` folder.
-Fresh installs start with no family members. Open the app and create the first profile, then add more profiles from Settings.
+Settings includes manual database export/import for moving or restoring the Budget Tracker SQLite database.
 
-## Public Repository Notes
+Import is limited to `.db`, `.sqlite`, and `.sqlite3` files that pass SQLite integrity checks and match the Budget Tracker schema. It does not import archives, execute scripts, write Home Assistant configuration, access Home Assistant tokens, or restore attachment files.
 
-The repository is designed to be shared without personal data. The add-on `app-src` folder should contain only copied backend/frontend source. Do not include local runtime data, uploads, snapshots, logs, or built dependency folders when publishing.
+Optional AI import can be enabled by adding a Google AI Studio API key in the app configuration page. The key is read from the user's local Home Assistant app options at runtime and is not included in this repository.
 
-## Single-App Production Run
-
-Build the frontend and let FastAPI serve it:
-
-```powershell
-cd frontend
-npm run build
-cd ..
-$env:FRONTEND_DIST_DIR = Join-Path $PWD "frontend\dist"
-$env:DATABASE_URL = "sqlite:///$($PWD.Path.Replace('\','/'))/data/budget_tracker.db"
-$env:UPLOAD_DIR = Join-Path $PWD "uploads"
-cd backend
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8099
-```
-
-Open `http://localhost:8099`.
-
-## Future AI Scanning
-
-AI receipt and bill scanning is intentionally not implemented in Phase 1. The app keeps placeholders in `.env.example` for future configuration, and files are never sent to an AI provider by this MVP.
+No local database, uploads, receipts, snapshots, or personal budget data are included in this repository.
