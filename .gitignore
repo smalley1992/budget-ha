@@ -16,4 +16,6 @@ backend/.coverage
 backend/htmlcov/
 *.egg-info/
 *.tsbuildinfo
+docs/
+
 
