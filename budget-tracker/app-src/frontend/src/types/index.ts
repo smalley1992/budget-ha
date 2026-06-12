@@ -45,6 +45,7 @@ export interface BudgetLine {
   name: string;
   amount: number;
   due_day: number | null;
+  payment_date: string | null;
   status: BudgetLineStatus;
   paid_date: string | null;
   is_static: boolean;
@@ -106,6 +107,7 @@ export interface AiImportProposal {
   type: BudgetLineType | null;
   name: string;
   amount: number;
+  payment_date: string | null;
   status: BudgetLineStatus;
   paid_date: string | null;
   linked_debt_id: number | null;

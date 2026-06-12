@@ -85,6 +85,7 @@ Output shape:
       "type": "bill|expense|savings_contribution|debt_payment or null for income",
       "name": "short label",
       "amount": 0.0,
+      "payment_date": "YYYY-MM-DD or null",
       "status": "paid|planned",
       "paid_date": "YYYY-MM-DD or null",
       "linked_debt_id": null,
@@ -99,6 +100,7 @@ Output shape:
 Rules:
 - Create one proposal per real transaction or bill total, not per OCR line.
 - Amounts are positive GBP values.
+- Use payment_date for when the payment was or will be made. For paid budget lines, paid_date should match payment_date when the document gives a date.
 - For bank statement money out, use budget item_kind.
 - For salary/refunds/money in, payslips, or salary statements, use income item_kind (do not categorize payslips under budget item_kind or bills).
 - If the document is a bill with one total due, create or update one bill line.

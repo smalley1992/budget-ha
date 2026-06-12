@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.9 - 2026-06-13
+
+- Added payment dates to budget lines for paid and planned payments.
+- Backfilled existing databases from paid dates or recurring due days during add-on startup.
+- Added an optional combined-view payment timeline graph.
+- Added compact savings/debt trend lines to balance cards.
+- Kept planned future savings and debt lines out of balances until marked paid.
+
 ## 0.5.8 - 2026-06-13
 
 - Added a per-entry Paid now / Planned control to the add budget line form.

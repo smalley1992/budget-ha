@@ -31,6 +31,7 @@ def budget_line_out(db: Session, line: models.BudgetLine) -> dict:
         "name": line.name,
         "amount": from_cents(line.amount_cents),
         "due_day": line.due_day,
+        "payment_date": line.payment_date.isoformat() if line.payment_date else None,
         "status": line.status,
         "paid_date": line.paid_date.isoformat() if line.paid_date else None,
         "is_static": line.is_static,

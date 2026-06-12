@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   Banknote,
+  BarChart3,
   CalendarPlus,
   Check,
   ChevronLeft,
@@ -53,6 +54,27 @@ type ModalState =
 function currentPeriod(): string {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function defaultPaymentDateForPeriod(period: string): string {
+  const [year, month] = period.split("-").map(Number);
+  const today = new Date();
+  if (!year || !month) {
+    return today.toISOString().slice(0, 10);
+  }
+  const day = Math.min(today.getDate(), new Date(year, month, 0).getDate());
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function formatPaymentDate(value: string | null): string {
+  if (!value) {
+    return "No date";
+  }
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) {
+    return value;
+  }
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(new Date(year, month - 1, day));
 }
 
 function nextPeriod(period: string): string {
@@ -172,7 +194,7 @@ export function App() {
   const [aiImportStatus, setAiImportStatus] = useState("");
 
   const [incomeForm, setIncomeForm] = useState({ name: "", amount: "", is_static: false });
-  const [lineForm, setLineForm] = useState({ name: "", amount: "", due_day: "", status: defaultLineStatusForPeriod(period), is_static: false, linked_debt_id: "", linked_savings_pot_id: "" });
+  const [lineForm, setLineForm] = useState({ name: "", amount: "", due_day: "", payment_date: defaultPaymentDateForPeriod(period), status: defaultLineStatusForPeriod(period), is_static: false, linked_debt_id: "", linked_savings_pot_id: "" });
   const [debtForm, setDebtForm] = useState({ name: "", starting_balance: "" });
   const [potForm, setPotForm] = useState({ name: "", starting_balance: "", target_amount: "" });
   const [profileForm, setProfileForm] = useState({ name: "", icon: "", salary: "" });
@@ -188,6 +210,11 @@ export function App() {
   );
   const debtOverviewTotal = useMemo(() => Math.max(0, debts.reduce((total, debt) => total + debt.current_balance, 0) - unallocatedPaidDebt), [debts, unallocatedPaidDebt]);
   const savingsOverviewTotal = useMemo(() => pots.reduce((total, pot) => total + pot.current_balance, 0), [pots]);
+  const savingsOverviewTrend = useMemo(() => {
+    const starting = pots.reduce((total, pot) => total + pot.starting_balance, 0);
+    const contributed = pots.reduce((total, pot) => total + pot.contributed_amount, 0);
+    return [starting, starting + contributed * 0.45, savingsOverviewTotal];
+  }, [pots, savingsOverviewTotal]);
 
   async function loadAll() {
     setBusy(true);
@@ -382,6 +409,8 @@ export function App() {
           item_kind: proposal.item_kind || "budget",
           type: proposal.item_kind === "income" ? null : proposal.type || "expense",
           status: proposal.status || "paid",
+          payment_date: proposal.payment_date || proposal.paid_date || proposal.date || defaultPaymentDateForPeriod(period),
+          paid_date: proposal.paid_date || ((proposal.status || "paid") === "paid" ? proposal.date : null),
           amount: Number(proposal.amount || 0),
           confidence: Number(proposal.confidence || 0),
         })),
@@ -424,6 +453,8 @@ export function App() {
           item_kind: proposal.item_kind || "budget",
           type: proposal.item_kind === "income" ? null : proposal.type || "expense",
           status: proposal.status || "paid",
+          payment_date: proposal.payment_date || proposal.paid_date || proposal.date || defaultPaymentDateForPeriod(period),
+          paid_date: proposal.paid_date || ((proposal.status || "paid") === "paid" ? proposal.date : null),
           amount: Number(proposal.amount || 0),
           confidence: Number(proposal.confidence || 0),
         })),
@@ -460,6 +491,7 @@ export function App() {
             type: proposal.type || "expense",
             name: proposal.name,
             amount: proposal.amount,
+            payment_date: proposal.payment_date,
             status: proposal.status,
             paid_date: proposal.paid_date,
             linked_debt_id: proposal.linked_debt_id,
@@ -472,6 +504,7 @@ export function App() {
             type: proposal.type || "expense",
             name: proposal.name,
             amount: proposal.amount,
+            payment_date: proposal.payment_date,
             status: proposal.status,
             paid_date: proposal.paid_date,
             linked_debt_id: proposal.linked_debt_id,
@@ -484,7 +517,7 @@ export function App() {
   }
 
   function openBudgetModal(type: BudgetLineType, title?: string, name = "") {
-    setLineForm({ name, amount: "", due_day: "", status: defaultLineStatusForPeriod(period), is_static: false, linked_debt_id: "", linked_savings_pot_id: "" });
+    setLineForm({ name, amount: "", due_day: "", payment_date: defaultPaymentDateForPeriod(period), status: defaultLineStatusForPeriod(period), is_static: false, linked_debt_id: "", linked_savings_pot_id: "" });
     setModal({ kind: "budget", type, title });
     setAddMenuOpen(false);
   }
@@ -572,7 +605,7 @@ export function App() {
       <section className="metrics" aria-label="Budget totals">
         <Metric icon={<Banknote />} label="Income" value={summary.totals.income} onClick={view === "combined" ? () => setHeroDrilldown("income") : () => setIncomeOpen(true)} />
         <Metric icon={<WalletCards />} label="Outgoings" value={summary.totals.outgoings} onClick={view === "combined" ? () => setHeroDrilldown("outgoings") : undefined} />
-        <Metric icon={<PiggyBank />} label="Savings" value={savingsOverviewTotal} onClick={view === "combined" ? () => setHeroDrilldown("savings_balance") : undefined} />
+        <Metric icon={<PiggyBank />} label="Savings" value={savingsOverviewTotal} trend={savingsOverviewTrend} onClick={view === "combined" ? () => setHeroDrilldown("savings_balance") : undefined} />
         <Metric icon={<Check />} label="Leftover" value={summary.totals.leftover} emphasis={summary.totals.leftover >= 0 ? "good" : "bad"} onClick={view === "combined" ? () => setHeroDrilldown("leftover") : undefined} />
       </section>
 
@@ -675,6 +708,7 @@ export function App() {
                     name: lineForm.name,
                     amount: Number(lineForm.amount),
                     due_day: lineForm.due_day ? Number(lineForm.due_day) : null,
+                    payment_date: lineForm.payment_date || null,
                     status: lineForm.status,
                     is_static: lineForm.is_static,
                     linked_debt_id: lineForm.linked_debt_id ? Number(lineForm.linked_debt_id) : null,
@@ -686,7 +720,11 @@ export function App() {
             >
               <input required placeholder="Name" value={lineForm.name} onChange={(event) => setLineForm({ ...lineForm, name: event.target.value })} />
               <input required min="0" step="0.01" type="number" placeholder="Amount" value={lineForm.amount} onChange={(event) => setLineForm({ ...lineForm, amount: event.target.value })} />
-              <input min="1" max="31" type="number" placeholder="Due day" value={lineForm.due_day} onChange={(event) => setLineForm({ ...lineForm, due_day: event.target.value })} />
+              <label className="date-field">
+                {lineForm.status === "paid" ? "Paid on" : "To be paid on"}
+                <input type="date" value={lineForm.payment_date} onChange={(event) => setLineForm({ ...lineForm, payment_date: event.target.value, due_day: event.target.value ? String(Number(event.target.value.slice(-2))) : lineForm.due_day })} />
+              </label>
+              <input min="1" max="31" type="number" placeholder="Recurring day" value={lineForm.due_day} onChange={(event) => setLineForm({ ...lineForm, due_day: event.target.value })} />
               {modal.type === "debt_payment" && (
                 <select value={lineForm.linked_debt_id} onChange={(event) => setLineForm({ ...lineForm, linked_debt_id: event.target.value })}>
                   <option value="">No target yet</option>
@@ -1116,11 +1154,27 @@ export function App() {
                       }}
                     />
                     {proposal.item_kind === "budget" && (
+                      <input
+                        type="date"
+                        value={proposal.payment_date ?? ""}
+                        onChange={(event) => {
+                          const proposals = [...aiReview.proposals];
+                          proposals[index] = {
+                            ...proposal,
+                            payment_date: event.target.value || null,
+                            paid_date: proposal.status === "paid" ? event.target.value || null : proposal.paid_date,
+                          };
+                          setAiReview({ ...aiReview, proposals });
+                        }}
+                      />
+                    )}
+                    {proposal.item_kind === "budget" && (
                       <select
                         value={proposal.status}
                         onChange={(event) => {
                           const proposals = [...aiReview.proposals];
-                          proposals[index] = { ...proposal, status: event.target.value as BudgetLineStatus };
+                          const status = event.target.value as BudgetLineStatus;
+                          proposals[index] = { ...proposal, status, paid_date: status === "paid" ? proposal.payment_date : null };
                           setAiReview({ ...aiReview, proposals });
                         }}
                       >
@@ -1297,6 +1351,7 @@ function CombinedOverview({ users, summary, income, lines, debts, pots, heroDril
   heroDrilldown: keyof Summary["totals"] | "debt_balance" | "savings_balance" | null;
   setHeroDrilldown: (value: keyof Summary["totals"] | "debt_balance" | "savings_balance" | null) => void;
 }) {
+  const [showPaymentTimeline, setShowPaymentTimeline] = useState(false);
   const byUserSavings = (userId: UserSlug) => pots.filter((pot) => pot.user_id === userId).reduce((total, pot) => total + pot.current_balance, 0);
   const paidSavingsLines = lines.filter((line) => line.type === "savings_contribution" && line.status === "paid");
   const byUserSavingsThisMonth = (userId: UserSlug) => paidSavingsLines.filter((line) => line.user_id === userId).reduce((total, line) => total + line.amount, 0);
@@ -1312,19 +1367,30 @@ function CombinedOverview({ users, summary, income, lines, debts, pots, heroDril
     : heroDrilldown === "savings_balance" ? "Savings breakdown"
     : heroDrilldown === "leftover" ? "Leftover split"
     : "Household overview";
+  const headerAction = heroDrilldown ? (
+    <button className="icon-text" onClick={() => setHeroDrilldown(null)}><X size={16} /> Close</button>
+  ) : (
+    <button className={`icon-text ${showPaymentTimeline ? "active" : ""}`} onClick={() => setShowPaymentTimeline(!showPaymentTimeline)}>
+      <BarChart3 size={16} /> {showPaymentTimeline ? "Hide graph" : "Show graph"}
+    </button>
+  );
 
   return (
     <div className="combined-grid">
       <section className="panel wide-combined combined-focus">
         <PanelHeader
           title={title}
-          action={heroDrilldown && <button className="icon-text" onClick={() => setHeroDrilldown(null)}><X size={16} /> Close</button>}
+          action={headerAction}
         />
         {!heroDrilldown && (
-          <div className="hero-prompt">
-            <strong>Tap a top card to inspect the household numbers.</strong>
-            <span>Income shows each income list, Outgoings shows every line, Savings opens pots and contributions, and Leftover compares each person.</span>
-          </div>
+          showPaymentTimeline ? (
+            <PaymentTimeline lines={lines} users={users} />
+          ) : (
+            <div className="hero-prompt">
+              <strong>Tap a top card to inspect the household numbers.</strong>
+              <span>Income shows each income list, Outgoings shows every line, Savings opens pots and contributions, and Leftover compares each person.</span>
+            </div>
+          )
         )}
         {heroDrilldown === "income" && (
           <IncomeList income={income} users={users} canEdit={false} />
@@ -1372,6 +1438,48 @@ function CombinedOverview({ users, summary, income, lines, debts, pots, heroDril
           </div>
         )}
       </section>
+    </div>
+  );
+}
+
+function PaymentTimeline({ lines, users }: { lines: BudgetLine[]; users: User[] }) {
+  const rows = lines
+    .filter((line) => Boolean(line.payment_date))
+    .sort((first, second) => String(first.payment_date).localeCompare(String(second.payment_date)))
+    .reduce<Array<{ date: string; total: number; paid: number; planned: number; count: number; users: Set<UserSlug> }>>((groups, line) => {
+      const dateKey = line.payment_date as string;
+      let group = groups.find((item) => item.date === dateKey);
+      if (!group) {
+        group = { date: dateKey, total: 0, paid: 0, planned: 0, count: 0, users: new Set<UserSlug>() };
+        groups.push(group);
+      }
+      group.total += line.amount;
+      group[line.status] += line.amount;
+      group.count += 1;
+      group.users.add(line.user_id);
+      return groups;
+    }, []);
+  const maxTotal = Math.max(...rows.map((row) => row.total), 1);
+
+  if (rows.length === 0) {
+    return <div className="empty-state">No payment dates have been added yet.</div>;
+  }
+
+  return (
+    <div className="payment-timeline" aria-label="Payment timeline">
+      {rows.map((row) => (
+        <div className="payment-timeline-row" key={row.date}>
+          <div>
+            <strong>{formatPaymentDate(row.date)}</strong>
+            <span>{Array.from(row.users).map((userId) => userName(users, userId)).join(", ")}</span>
+          </div>
+          <div className="payment-timeline-bar" aria-hidden="true">
+            <span style={{ width: `${Math.max(8, (row.total / maxTotal) * 100)}%` }} />
+          </div>
+          <b>{money(row.total)}</b>
+          <small>{row.count} line{row.count === 1 ? "" : "s"} / {row.paid > 0 ? `${money(row.paid)} paid` : "planned"}</small>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1457,7 +1565,10 @@ function BudgetLineTable({ lines, debts, pots, users, canEdit, run, onAttachment
                 <span className="line-user">{userName(users, line.user_id)}</span>
                 <span className="line-type">{lineTypes.find((item) => item.id === line.type)?.button}</span>
               </span>
-              <strong className="line-name">{line.name}</strong>
+              <strong className="line-name">
+                {line.name}
+                <span className="line-subvalue">{line.status === "paid" ? "Paid" : "Planned"} {formatPaymentDate(line.payment_date)}</span>
+              </strong>
               <b className="line-amount">{money(line.amount)}</b>
             </button>
             {expanded && (
@@ -1467,11 +1578,12 @@ function BudgetLineTable({ lines, debts, pots, users, canEdit, run, onAttachment
                     <>
                       <label>Name<input defaultValue={line.name} onBlur={(event) => void run(() => api.updateBudgetLine(line.id, { name: event.target.value }))} /></label>
                       <label>Amount<input type="number" step="0.01" defaultValue={line.amount} onBlur={(event) => void run(() => api.updateBudgetLine(line.id, { amount: Number(event.target.value) }))} /></label>
-                      <label>Due day<input type="number" min="1" max="31" defaultValue={line.due_day ?? ""} onBlur={(event) => void run(() => api.updateBudgetLine(line.id, { due_day: event.target.value ? Number(event.target.value) : null }))} /></label>
+                      <label>{line.status === "paid" ? "Paid on" : "To be paid on"}<input type="date" defaultValue={line.payment_date ?? ""} onBlur={(event) => void run(() => api.updateBudgetLine(line.id, { payment_date: event.target.value || null }))} /></label>
+                      <label>Recurring day<input type="number" min="1" max="31" defaultValue={line.due_day ?? ""} onBlur={(event) => void run(() => api.updateBudgetLine(line.id, { due_day: event.target.value ? Number(event.target.value) : null }))} /></label>
                     </>
                   ) : null}
                   <div><span>Target</span><strong>{targetName(line, debts, pots) || "None"}</strong></div>
-                  <div><span>Status</span><strong>{line.status}</strong></div>
+                  <div><span>Status</span><strong>{line.status === "paid" ? "Paid" : "Planned"}</strong></div>
                   <div><span>Recurring</span><strong>{line.is_static ? "Yes" : "No"}</strong></div>
                 </div>
                 {canEdit && (
@@ -1528,6 +1640,7 @@ function ReadOnlyLineList({ lines, debts, pots, users }: { lines: BudgetLine[]; 
               <strong className="line-name">
                 {line.name}
                 {targetSubvalue && <span className="line-subvalue">{targetSubvalue}</span>}
+                <span className="line-subvalue">{line.status === "paid" ? "Paid" : "Planned"} {formatPaymentDate(line.payment_date)}</span>
                 {line.type === "debt_payment" && line.linked_debt_id === null && <span className="target-badge inline">Needs target</span>}
               </strong>
               <b className="line-amount">{money(line.amount)}</b>
@@ -1580,7 +1693,7 @@ function IncomeList({ income, users, canEdit, run }: {
   );
 }
 
-function Metric({ icon, label, value, emphasis, onClick }: { icon: ReactNode; label: string; value: number; emphasis?: "good" | "bad"; onClick?: () => void }) {
+function Metric({ icon, label, value, emphasis, trend, onClick }: { icon: ReactNode; label: string; value: number; emphasis?: "good" | "bad"; trend?: number[]; onClick?: () => void }) {
   const Component = onClick ? "button" : "article";
   return (
     <Component className={`metric ${emphasis ?? ""} ${onClick ? "clickable" : ""}`} onClick={onClick}>
@@ -1588,8 +1701,27 @@ function Metric({ icon, label, value, emphasis, onClick }: { icon: ReactNode; la
       <div>
         <p>{label}</p>
         <strong>{money(value)}</strong>
+        {trend && <MiniTrend values={trend} tone={emphasis === "bad" ? "bad" : "good"} />}
       </div>
     </Component>
+  );
+}
+
+function MiniTrend({ values, tone = "good" }: { values: number[]; tone?: "good" | "bad" }) {
+  const usable = values.length > 1 ? values : [0, 0];
+  const min = Math.min(...usable);
+  const max = Math.max(...usable);
+  const range = max - min || 1;
+  const points = usable.map((value, index) => {
+    const x = (index / Math.max(usable.length - 1, 1)) * 100;
+    const y = 26 - ((value - min) / range) * 22;
+    return `${x},${y}`;
+  }).join(" ");
+
+  return (
+    <svg className={`mini-trend ${tone}`} viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points={points} />
+    </svg>
   );
 }
 
@@ -1641,6 +1773,9 @@ function BalanceLineList({ rows, users, canEdit, kind, monthlyActivity = {}, onP
       {rows.map((row) => {
         const current = row.current_balance;
         const progress = "paid_amount" in row ? row.paid_amount : row.contributed_amount;
+        const trendValues = kind === "debt"
+          ? [row.starting_balance, Math.max(current, row.starting_balance - progress * 0.45), current]
+          : [row.starting_balance, row.starting_balance + progress * 0.45, current, "target_amount" in row && row.target_amount ? row.target_amount : current];
         const expanded = expandedId === row.id;
         const activity = monthlyActivity[row.id] ?? 0;
         return (
@@ -1654,7 +1789,10 @@ function BalanceLineList({ rows, users, canEdit, kind, monthlyActivity = {}, onP
                 {row.name}
                 {activity > 0 && <span className="line-subvalue">+{money(activity)} this month</span>}
               </strong>
-              <b className="line-amount">{money(current)}</b>
+              <span className="line-amount-stack">
+                <b className="line-amount">{money(current)}</b>
+                <MiniTrend values={trendValues} tone={kind === "debt" ? "bad" : "good"} />
+              </span>
             </button>
             {expanded && (
               <div className="line-details">

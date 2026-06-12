@@ -8,13 +8,14 @@ from .config import get_settings
 from .database import Base, SessionLocal, engine
 from .routers import ai_import, attachments, backups, budget_lines, categories, debts, income, months, savings, summary, users
 from .services.common import seed_default_categories
-from .services.migrations import ensure_user_profile_columns
+from .services.migrations import ensure_budget_line_payment_date, ensure_user_profile_columns
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     ensure_user_profile_columns(engine)
+    ensure_budget_line_payment_date(engine)
     with SessionLocal() as db:
         seed_default_categories(db)
     yield
@@ -95,4 +96,3 @@ def setup_logging():
 
 setup_logging()
 app = create_app()
-

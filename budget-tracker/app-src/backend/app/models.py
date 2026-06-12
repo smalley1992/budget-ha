@@ -63,6 +63,7 @@ class BudgetLine(Base):
     name: Mapped[str] = mapped_column(String(160))
     amount_cents: Mapped[int] = mapped_column(Integer)
     due_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    payment_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     status: Mapped[str] = mapped_column(String(16), default="planned", index=True)
     paid_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     is_static: Mapped[bool] = mapped_column(Boolean, default=False)

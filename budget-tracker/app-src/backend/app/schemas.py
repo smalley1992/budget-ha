@@ -82,6 +82,7 @@ class BudgetLineCreate(BaseModel):
     name: str
     amount: float
     due_day: int | None = Field(default=None, ge=1, le=31)
+    payment_date: date | None = None
     status: BudgetLineStatus = "planned"
     paid_date: date | None = None
     is_static: bool = False
@@ -95,6 +96,7 @@ class BudgetLineUpdate(BaseModel):
     name: str | None = None
     amount: float | None = None
     due_day: int | None = Field(default=None, ge=1, le=31)
+    payment_date: date | None = None
     status: BudgetLineStatus | None = None
     paid_date: date | None = None
     is_static: bool | None = None
@@ -111,6 +113,7 @@ class BudgetLineOut(BaseModel):
     name: str
     amount: float
     due_day: int | None
+    payment_date: date | None
     status: str
     paid_date: date | None
     is_static: bool

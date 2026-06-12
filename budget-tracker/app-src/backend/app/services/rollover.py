@@ -1,7 +1,18 @@
+from calendar import monthrange
+from datetime import date
+
 from sqlalchemy.orm import Session
 
 from .. import models
 from .common import get_month, get_or_create_month
+
+
+def _rollover_payment_date(line: models.BudgetLine, target_period: str) -> date | None:
+    day = line.payment_date.day if line.payment_date else line.due_day
+    if not day:
+        return None
+    year, month = (int(part) for part in target_period.split("-"))
+    return date(year, month, min(day, monthrange(year, month)[1]))
 
 
 def rollover_month(db: Session, source_period: str, target_period: str) -> dict:
@@ -56,6 +67,7 @@ def rollover_month(db: Session, source_period: str, target_period: str) -> dict:
                 name=line.name,
                 amount_cents=line.amount_cents,
                 due_day=line.due_day,
+                payment_date=_rollover_payment_date(line, target.period),
                 status="planned",
                 paid_date=None,
                 is_static=True,

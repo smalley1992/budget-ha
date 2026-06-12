@@ -1,3 +1,4 @@
+from calendar import monthrange
 from datetime import date
 from pathlib import Path
 
@@ -50,6 +51,13 @@ def _validate_links(db: Session, user: models.User, line_type: str, debt_id: int
     return None, None
 
 
+def _default_payment_date(period: str, due_day: int | None) -> date:
+    year, month = (int(part) for part in period.split("-"))
+    today = date.today()
+    day = due_day or today.day
+    return date(year, month, min(day, monthrange(year, month)[1]))
+
+
 @router.get("", response_model=list[schemas.BudgetLineOut])
 def list_budget_lines(
     period: str = Query(pattern=r"^\d{4}-\d{2}$"),
@@ -73,15 +81,18 @@ def create_budget_line(payload: schemas.BudgetLineCreate, db: Session = Depends(
     user = get_user(db, payload.user_id)
     month = get_or_create_month(db, payload.period)
     debt_id, pot_id = _validate_links(db, user, payload.type, payload.linked_debt_id, payload.linked_savings_pot_id)
+    payment_date = payload.payment_date or _default_payment_date(payload.period, payload.due_day)
+    paid_date = payload.paid_date or (payment_date if payload.status == "paid" else None)
     line = models.BudgetLine(
         user_id=user.id,
         month_id=month.id,
         type=payload.type,
         name=payload.name,
         amount_cents=to_cents(payload.amount),
-        due_day=payload.due_day,
+        due_day=payload.due_day or payment_date.day,
+        payment_date=payment_date,
         status=payload.status,
-        paid_date=payload.paid_date or (date.today() if payload.status == "paid" else None),
+        paid_date=paid_date,
         is_static=payload.is_static,
         notes=payload.notes,
         linked_debt_id=debt_id,
@@ -110,15 +121,21 @@ def update_budget_line(
     new_pot_id = updates.get("linked_savings_pot_id", line.linked_savings_pot_id)
     debt_id, pot_id = _validate_links(db, line.user, new_type, new_debt_id, new_pot_id)
 
-    for field in ("type", "name", "due_day", "status", "paid_date", "is_static", "notes"):
+    for field in ("type", "name", "due_day", "payment_date", "status", "paid_date", "is_static", "notes"):
         if field in updates:
             setattr(line, field, updates[field])
     if "amount" in updates:
         line.amount_cents = to_cents(updates["amount"])
     line.linked_debt_id = debt_id
     line.linked_savings_pot_id = pot_id
+    if line.payment_date is None:
+        line.payment_date = _default_payment_date(line.month.period, line.due_day)
+    if "payment_date" in updates and "due_day" not in updates and line.payment_date is not None:
+        line.due_day = line.payment_date.day
+    if line.status == "paid" and "payment_date" in updates and "paid_date" not in updates:
+        line.paid_date = line.payment_date
     if line.status == "paid" and line.paid_date is None:
-        line.paid_date = date.today()
+        line.paid_date = line.payment_date or date.today()
     if line.status == "planned":
         line.paid_date = None
     sync_budget_line_ledger(db, line)
@@ -133,7 +150,8 @@ def mark_paid(line_id: int, db: Session = Depends(get_db)) -> dict:
     if not line:
         raise HTTPException(status_code=404, detail="Budget line not found")
     line.status = "paid"
-    line.paid_date = date.today()
+    line.payment_date = date.today()
+    line.paid_date = line.payment_date
     sync_budget_line_ledger(db, line)
     db.commit()
     db.refresh(line)

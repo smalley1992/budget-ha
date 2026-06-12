@@ -119,6 +119,31 @@ def test_debt_payment_ledger_lifecycle(client: TestClient) -> None:
     assert client.get("/api/debts", params={"user_id": alex_id}).json()[0]["current_balance"] == 2000
 
 
+def test_payment_date_defaults_inside_selected_period_without_moving_planned_balances(client: TestClient) -> None:
+    alex_id, _ = create_family(client)
+    debt = client.post("/api/debts", json={"user_id": alex_id, "name": "Card", "starting_balance": 500}).json()
+    line = client.post(
+        "/api/budget-lines",
+        json={
+            "user_id": alex_id,
+            "period": "2026-07",
+            "type": "debt_payment",
+            "name": "Card payment",
+            "amount": 100,
+            "status": "planned",
+            "linked_debt_id": debt["id"],
+        },
+    ).json()
+
+    assert line["payment_date"].startswith("2026-07-")
+    assert line["paid_date"] is None
+    assert client.get("/api/debts", params={"user_id": alex_id}).json()[0]["current_balance"] == 500
+
+    paid = client.post(f"/api/budget-lines/{line['id']}/mark-paid").json()
+    assert paid["paid_date"] == paid["payment_date"]
+    assert client.get("/api/debts", params={"user_id": alex_id}).json()[0]["current_balance"] == 400
+
+
 def test_savings_contribution_ledger_lifecycle(client: TestClient) -> None:
     _, sam_id = create_family(client)
     pot = client.post("/api/savings-pots", json={"user_id": sam_id, "name": "Holiday", "starting_balance": 500}).json()
@@ -192,6 +217,7 @@ def test_rollover_static_items_without_attachments(client: TestClient) -> None:
     assert len(lines) == 1
     assert lines[0]["name"] == "Broadband"
     assert lines[0]["status"] == "planned"
+    assert lines[0]["payment_date"].startswith("2026-07-")
     assert lines[0]["attachment_count"] == 0
 
 

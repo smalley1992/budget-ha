@@ -414,6 +414,10 @@ input[type="checkbox"] {
   font-size: 24px;
 }
 
+.metric .mini-trend {
+  margin-top: 8px;
+}
+
 .metric.good {
   border-color: color-mix(in srgb, #287d4d 30%, var(--border));
 }
@@ -430,6 +434,28 @@ input[type="checkbox"] {
   border-color: var(--accent);
   box-shadow: 0 18px 36px rgb(32 49 44 / 14%);
   transform: translateY(-2px);
+}
+
+.mini-trend {
+  display: block;
+  width: min(150px, 100%);
+  height: 30px;
+  overflow: visible;
+}
+
+.mini-trend polyline {
+  fill: none;
+  stroke: #2f9b68;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 5px 7px rgb(47 155 104 / 20%));
+}
+
+.mini-trend.bad polyline {
+  stroke: #9a6ab0;
+  filter: drop-shadow(0 5px 7px rgb(154 106 176 / 20%));
 }
 
 .workspace {
@@ -552,12 +578,24 @@ input[type="checkbox"] {
   font-size: 18px;
 }
 
+.icon-text.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .checkline {
   min-height: 40px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   color: var(--muted);
+}
+
+.date-field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .status-toggle {
@@ -860,6 +898,18 @@ table {
 
 .line-main.read-only {
   cursor: default;
+}
+
+.line-amount-stack {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  min-width: 0;
+}
+
+.line-amount-stack .mini-trend {
+  width: 112px;
+  height: 24px;
 }
 
 .line-chip-row {
@@ -1520,6 +1570,52 @@ td select {
   color: var(--muted);
 }
 
+.payment-timeline {
+  display: grid;
+  gap: 10px;
+}
+
+.payment-timeline-row {
+  display: grid;
+  grid-template-columns: minmax(105px, 0.9fr) minmax(120px, 2fr) minmax(88px, auto) minmax(130px, 1fr);
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--panel-soft);
+}
+
+.payment-timeline-row strong,
+.payment-timeline-row b {
+  color: var(--text);
+}
+
+.payment-timeline-row span,
+.payment-timeline-row small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.payment-timeline-row > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.payment-timeline-bar {
+  height: 12px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 70%, transparent);
+  overflow: hidden;
+}
+
+.payment-timeline-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #2f9b68, #4f8fd8);
+}
+
 .drill-stack {
   display: grid;
   gap: 14px;
@@ -1666,6 +1762,21 @@ td select {
     font-size: 15px;
   }
 
+  .line-amount-stack {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    align-self: center;
+  }
+
+  .line-amount-stack .line-amount {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .line-amount-stack .mini-trend {
+    width: 86px;
+  }
+
   .line-subvalue {
     font-size: 11px;
   }
@@ -1741,6 +1852,15 @@ td select {
   .entity-card .detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
+  }
+
+  .payment-timeline-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .payment-timeline-bar {
+    grid-column: 1 / -1;
+    order: 4;
   }
 
   .metric strong {
