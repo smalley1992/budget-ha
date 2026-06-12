@@ -1,5 +1,6 @@
 from collections.abc import Generator
 import io
+import json
 
 import pytest
 from fastapi import HTTPException
@@ -415,4 +416,73 @@ def test_google_ai_falls_back_when_gemma_31b_keeps_failing(monkeypatch) -> None:
     result = call_google_ai("test-key", "gemma-4-31b-it", "prompt", "image/jpeg", b"image")
 
     assert calls == ["gemma-4-31b-it", "gemma-4-31b-it", "gemma-4-31b-it", "gemma-4-26b-a4b-it"]
+    assert result["summary"] == "fallback"
+
+
+def test_google_ai_suppresses_thought_summaries(monkeypatch) -> None:
+    captured_body: dict = {}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return b'{"candidates":[{"content":{"parts":[{"text":"{\\"document_type\\":\\"receipt\\",\\"summary\\":\\"ok\\",\\"proposals\\":[]}"}]}}]}'
+
+    def fake_urlopen(request, timeout):
+        captured_body.update(json.loads(request.data.decode("utf-8")))
+        return FakeResponse()
+
+    monkeypatch.setattr(ai_import_service.urllib.request, "urlopen", fake_urlopen)
+
+    result = call_google_ai("test-key", "gemini-2.5-flash", "prompt", "image/jpeg", b"image")
+
+    thinking_config = captured_body["generationConfig"]["thinkingConfig"]
+    assert thinking_config["includeThoughts"] is False
+    assert thinking_config["thinkingBudget"] == 0
+    assert "systemInstruction" in captured_body
+    assert result["summary"] == "ok"
+
+
+def test_google_ai_falls_back_when_response_is_thought_only(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class FakeThoughtOnlyResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return (
+                b'{"candidates":[{"content":{"parts":[{"text":"thinking instead of final JSON","thought":true}]},'
+                b'"finishReason":"MAX_TOKENS"}]}'
+            )
+
+    class FakeFinalResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return b'{"candidates":[{"content":{"parts":[{"text":"{\\"document_type\\":\\"receipt\\",\\"summary\\":\\"fallback\\",\\"proposals\\":[]}"}]}}]}'
+
+    def fake_urlopen(request, timeout):
+        if "gemma-4-31b-it" in request.full_url:
+            calls.append("gemma-4-31b-it")
+            return FakeThoughtOnlyResponse()
+        calls.append("gemma-4-26b-a4b-it")
+        return FakeFinalResponse()
+
+    monkeypatch.setattr(ai_import_service.urllib.request, "urlopen", fake_urlopen)
+
+    result = call_google_ai("test-key", "gemma-4-31b-it", "prompt", "image/jpeg", b"image")
+
+    assert calls == ["gemma-4-31b-it", "gemma-4-26b-a4b-it"]
     assert result["summary"] == "fallback"

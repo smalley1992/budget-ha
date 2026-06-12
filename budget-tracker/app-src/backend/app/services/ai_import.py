@@ -63,6 +63,7 @@ def build_import_prompt(period: str, view: str, context: dict[str, Any]) -> str:
 You extract budget entries from one uploaded UK household finance document: a bill, receipt, or bank statement.
 
 Return strict JSON only. Do not include markdown.
+Do not include internal reasoning, thought summaries, explanations, or analysis outside the JSON.
 
 Current month: {period}
 Current view: {view}
@@ -173,6 +174,15 @@ def _google_ai_model_attempts(model: str) -> list[str]:
     return attempts
 
 
+def _thinking_config_for_model(model: str) -> dict[str, Any]:
+    config: dict[str, Any] = {"includeThoughts": False}
+    if model.startswith("gemini-2.5-"):
+        config["thinkingBudget"] = 0
+    elif model.startswith("gemini-3-"):
+        config["thinkingLevel"] = "minimal"
+    return config
+
+
 def _call_google_ai_model(api_key: str, model: str, prompt: str, mime_type: str, content: bytes) -> dict[str, Any]:
     if not api_key.strip():
         logger.error("API key validation failed: empty API key.")
@@ -180,6 +190,13 @@ def _call_google_ai_model(api_key: str, model: str, prompt: str, mime_type: str,
     
     logger.info(f"Preparing Google AI API request. Model: {model}, Mime: {mime_type}, Size: {len(content)} bytes")
     body = {
+        "systemInstruction": {
+            "parts": [
+                {
+                    "text": "You are a finance document extraction engine. Return final strict JSON only. Do not output reasoning, thought summaries, markdown, or prose."
+                }
+            ]
+        },
         "contents": [
             {
                 "role": "user",
@@ -194,6 +211,7 @@ def _call_google_ai_model(api_key: str, model: str, prompt: str, mime_type: str,
             "topP": 0.8,
             "maxOutputTokens": 4096,
             "responseMimeType": "application/json",
+            "thinkingConfig": _thinking_config_for_model(model),
         },
     }
     request_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
@@ -252,12 +270,20 @@ def _call_google_ai_model(api_key: str, model: str, prompt: str, mime_type: str,
     else:
         raise HTTPException(status_code=502, detail=f"{last_message} Try again in a moment.")
 
-    parts = payload.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+    candidate = payload.get("candidates", [{}])[0]
+    finish_reason = candidate.get("finishReason")
+    parts = candidate.get("content", {}).get("parts", [])
     # Filter out parts marked as thought/reasoning (where part.get("thought") is truthy)
     clean_parts = [part for part in parts if isinstance(part, dict) and not part.get("thought")]
     text = "".join(part.get("text", "") for part in clean_parts)
     if not text:
-        logger.error("AI response content candidate parts was empty after filtering thought blocks.")
+        thought_part_count = len([part for part in parts if isinstance(part, dict) and part.get("thought")])
+        logger.error(
+            "AI response had no final text after filtering thought blocks. "
+            f"finish_reason={finish_reason}, thought_parts={thought_part_count}"
+        )
+        if thought_part_count:
+            raise HTTPException(status_code=502, detail="Google AI used its output on reasoning instead of JSON. Try the fallback model or retry.")
         raise HTTPException(status_code=502, detail="Google AI returned no parse result")
     
     logger.info(f"AI response candidate text size: {len(text)} characters.")

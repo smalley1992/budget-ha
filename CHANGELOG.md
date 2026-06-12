@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.6 - 2026-06-12
+
+- Suppressed Google AI thought summaries in AI import requests.
+- Added minimal/no-thinking request controls for supported Gemini models.
+- Added fallback handling when a model returns only thought blocks instead of final JSON.
+
 ## 0.5.5 - 2026-06-12
 
 - Fixed dark mode metric/hero card text inheriting browser-default black button text.
