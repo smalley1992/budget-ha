@@ -158,7 +158,9 @@ button:disabled {
   border: 1px solid var(--field-border);
   border-radius: 8px;
   background: var(--field);
+  color: var(--text);
   overflow: hidden;
+  text-align: left;
 }
 
 .month-control strong {
@@ -167,18 +169,6 @@ button:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.month-control input {
-  position: absolute;
-  inset: 0;
-  min-width: 0;
-  height: 100%;
-  min-height: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-  opacity: 0;
 }
 
 input,
@@ -1206,6 +1196,59 @@ td select {
 .model-limit span,
 .model-limit small {
   color: var(--muted);
+}
+
+.month-picker {
+  display: grid;
+  gap: 12px;
+}
+
+.month-picker-head {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+}
+
+.month-picker-head strong {
+  text-align: center;
+  font-size: 18px;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.month-option {
+  display: grid;
+  gap: 4px;
+  min-height: 76px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--panel-soft);
+  color: var(--text);
+  text-align: left;
+}
+
+.month-option strong {
+  font-size: 15px;
+}
+
+.month-option span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.month-option.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel-soft));
+}
+
+.month-option.new {
+  border-style: dashed;
 }
 
 .setting-action {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.7 - 2026-06-12
+
+- Replaced the hidden native month input with an app-owned month picker.
+- Made new month selection copy recurring/static lines from the current month before switching.
+- Changed the Next Month action to create/copy recurring lines and navigate to the next month.
+
 ## 0.5.6 - 2026-06-12
 
 - Suppressed Google AI thought summaries in AI import requests.

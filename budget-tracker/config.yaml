@@ -1,6 +1,6 @@
 name: Budget Local
 slug: budget_tracker
-version: "0.5.6"
+version: "0.5.7"
 description: Self-hosted family budgeting app for monthly income, outgoings, savings, and debts.
 arch:
   - amd64

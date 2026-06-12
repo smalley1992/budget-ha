@@ -4,6 +4,8 @@ import {
   Banknote,
   CalendarPlus,
   Check,
+  ChevronLeft,
+  ChevronRight,
   CircleUserRound,
   Download,
   FileUp,
@@ -63,12 +65,24 @@ function nextPeriod(period: string): string {
   return `${year}-${String(month).padStart(2, "0")}`;
 }
 
+function periodYear(period: string): number {
+  return Number(period.split("-")[0]) || new Date().getFullYear();
+}
+
 function monthLabel(period: string): string {
   const [year, month] = period.split("-").map(Number);
   if (!year || !month) {
     return period;
   }
   return new Intl.DateTimeFormat("en-GB", { month: "long" }).format(new Date(year, month - 1, 1));
+}
+
+function monthYearLabel(period: string): string {
+  const [year, month] = period.split("-").map(Number);
+  if (!year || !month) {
+    return period;
+  }
+  return new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric" }).format(new Date(year, month - 1, 1));
 }
 
 function money(value: number): string {
@@ -141,6 +155,8 @@ export function App() {
   const [attachmentLine, setAttachmentLine] = useState<BudgetLine | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [monthPickerYear, setMonthPickerYear] = useState(periodYear(period));
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [heroDrilldown, setHeroDrilldown] = useState<keyof Summary["totals"] | "debt_balance" | "savings_balance" | null>(null);
   const [soloTab, setSoloTab] = useState<"budget" | "savings" | "debts">("budget");
@@ -279,6 +295,35 @@ export function App() {
       setView("combined");
       setShowSettings(false);
     }, "Database restored");
+  }
+
+  function openMonthPicker() {
+    setMonthPickerYear(periodYear(period));
+    setShowMonthPicker(true);
+  }
+
+  async function switchMonth(targetPeriod: string) {
+    if (targetPeriod === period) {
+      setShowMonthPicker(false);
+      return;
+    }
+    setBusy(true);
+    try {
+      const targetExists = months.includes(targetPeriod);
+      if (!targetExists) {
+        const result = await api.rollover(period, targetPeriod);
+        const copied = result.copied_income_lines + result.copied_budget_lines;
+        setMessage(`Created ${monthYearLabel(targetPeriod)} with ${copied} recurring line${copied === 1 ? "" : "s"}`);
+      } else {
+        setMessage("");
+      }
+      setShowMonthPicker(false);
+      setPeriod(targetPeriod);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not switch month");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function convertPdfToImageFile(file: File): Promise<File> {
@@ -482,16 +527,10 @@ export function App() {
           <p>{summary.period || period}</p>
         </div>
         <div className="topbar-controls">
-          <label className="month-control">
+          <button className="month-control" type="button" onClick={openMonthPicker} aria-label={`Change month, currently ${monthYearLabel(period)}`}>
             <strong>{monthLabel(period)}</strong>
-            <input list="known-months" type="month" value={period} onChange={(event) => setPeriod(event.target.value)} aria-label="Month" />
-            <datalist id="known-months">
-              {months.map((month) => (
-                <option key={month} value={month} />
-              ))}
-            </datalist>
-          </label>
-          <button className="icon-text" disabled={busy} onClick={() => void run(() => api.rollover(period, nextPeriod(period)), `Rolled into ${nextPeriod(period)}`)} title="Create next month">
+          </button>
+          <button className="icon-text" disabled={busy} onClick={() => void switchMonth(nextPeriod(period))} title="Create next month">
             <CalendarPlus size={18} />
             Next Month
           </button>
@@ -500,6 +539,19 @@ export function App() {
           </button>
         </div>
       </header>
+
+      {showMonthPicker && (
+        <EntryModal title="Choose month" onClose={() => setShowMonthPicker(false)}>
+          <MonthPicker
+            activePeriod={period}
+            knownMonths={months}
+            year={monthPickerYear}
+            busy={busy}
+            onYearChange={setMonthPickerYear}
+            onSelect={(targetPeriod) => void switchMonth(targetPeriod)}
+          />
+        </EntryModal>
+      )}
 
       {users.length > 0 && (
         <div className="viewbar">
@@ -1158,6 +1210,62 @@ function UserSwitcher({ users, view, onChange }: { users: User[]; view: ViewSlug
           {option.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+function MonthPicker({
+  activePeriod,
+  knownMonths,
+  year,
+  busy,
+  onYearChange,
+  onSelect,
+}: {
+  activePeriod: string;
+  knownMonths: string[];
+  year: number;
+  busy: boolean;
+  onYearChange: (year: number) => void;
+  onSelect: (period: string) => void;
+}) {
+  const knownMonthSet = new Set(knownMonths);
+  const monthsForYear = Array.from({ length: 12 }, (_, index) => {
+    const period = `${year}-${String(index + 1).padStart(2, "0")}`;
+    return {
+      period,
+      label: new Intl.DateTimeFormat("en-GB", { month: "short" }).format(new Date(year, index, 1)),
+      isActive: period === activePeriod,
+      exists: knownMonthSet.has(period),
+    };
+  });
+
+  return (
+    <div className="month-picker">
+      <div className="month-picker-head">
+        <button className="icon-button" type="button" disabled={busy} onClick={() => onYearChange(year - 1)} title="Previous year">
+          <ChevronLeft size={17} />
+        </button>
+        <strong>{year}</strong>
+        <button className="icon-button" type="button" disabled={busy} onClick={() => onYearChange(year + 1)} title="Next year">
+          <ChevronRight size={17} />
+        </button>
+      </div>
+      <div className="month-grid">
+        {monthsForYear.map((month) => (
+          <button
+            className={`month-option ${month.isActive ? "active" : ""} ${month.exists ? "existing" : "new"}`}
+            type="button"
+            disabled={busy}
+            key={month.period}
+            onClick={() => onSelect(month.period)}
+          >
+            <strong>{month.label}</strong>
+            <span>{month.isActive ? "Current" : month.exists ? "Has plan" : "Copy recurring"}</span>
+          </button>
+        ))}
+      </div>
+      <p className="form-hint">New months are created by copying recurring income, bills, debt payments, and savings lines from the current month. One-off paid lines stay behind.</p>
     </div>
   );
 }
