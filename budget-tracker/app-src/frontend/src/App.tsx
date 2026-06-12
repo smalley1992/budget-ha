@@ -460,12 +460,15 @@ export function App() {
           <p>{summary.period || period}</p>
         </div>
         <div className="topbar-controls">
-          <input list="known-months" type="month" value={period} onChange={(event) => setPeriod(event.target.value)} aria-label="Month" />
-          <datalist id="known-months">
-            {months.map((month) => (
-              <option key={month} value={month} />
-            ))}
-          </datalist>
+          <label className="month-control">
+            <span>Month</span>
+            <input list="known-months" type="month" value={period} onChange={(event) => setPeriod(event.target.value)} aria-label="Month" />
+            <datalist id="known-months">
+              {months.map((month) => (
+                <option key={month} value={month} />
+              ))}
+            </datalist>
+          </label>
           <UserSwitcher users={users} view={view} onChange={setView} />
           <button className="icon-text" disabled={busy} onClick={() => void run(() => api.rollover(period, nextPeriod(period)), `Rolled into ${nextPeriod(period)}`)} title="Create next month">
             <CalendarPlus size={18} />
