@@ -115,6 +115,8 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 8px;
+  max-width: 100%;
+  min-width: 0;
   flex-wrap: wrap;
   justify-content: flex-end;
   padding: 8px;
@@ -146,6 +148,7 @@ button:disabled {
 }
 
 .month-control {
+  position: relative;
   display: inline-grid;
   grid-template-columns: auto minmax(132px, 1fr);
   align-items: center;
@@ -157,14 +160,28 @@ button:disabled {
   background: var(--field);
 }
 
-.month-control span {
+.month-control span,
+.month-control strong {
   color: var(--muted);
+}
+
+.month-control span {
   font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
 }
 
+.month-control strong {
+  display: none;
+  min-width: 0;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .month-control input {
+  min-width: 0;
   min-height: 38px;
   border: 0;
   background: transparent;
@@ -1409,7 +1426,7 @@ td select {
 
   .topbar-controls {
     display: grid;
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: minmax(0, 1fr) 44px 44px;
     width: 100%;
     align-items: stretch;
     justify-content: stretch;
@@ -1419,13 +1436,27 @@ td select {
   }
 
   .month-control {
-    grid-column: 1 / -1;
+    grid-column: 1;
     width: 100%;
+    min-width: 0;
     grid-template-columns: auto minmax(0, 1fr);
+    padding: 8px 10px;
+    overflow: hidden;
+  }
+
+  .month-control strong {
+    display: block;
   }
 
   .month-control input {
+    position: absolute;
+    inset: 0;
+    height: 100%;
+    min-height: 0;
+    padding: 0;
+    opacity: 0;
     width: 100%;
+    cursor: pointer;
   }
 
   .workspace,
@@ -1558,10 +1589,19 @@ td select {
   }
 
   .topbar-controls > .icon-text,
-  .topbar-controls > .icon-button,
-  .icon-text,
-  .icon-button {
+  .topbar-controls > .icon-button {
+    width: 44px;
     min-width: 44px;
+    padding: 8px;
+  }
+
+  .topbar-controls > .icon-text {
+    font-size: 0;
+    gap: 0;
+  }
+
+  .topbar-controls > .icon-text svg {
+    flex: 0 0 auto;
   }
 
   .section-tabs {

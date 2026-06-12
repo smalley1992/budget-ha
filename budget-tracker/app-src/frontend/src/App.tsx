@@ -462,6 +462,7 @@ export function App() {
         <div className="topbar-controls">
           <label className="month-control">
             <span>Month</span>
+            <strong>{period}</strong>
             <input list="known-months" type="month" value={period} onChange={(event) => setPeriod(event.target.value)} aria-label="Month" />
             <datalist id="known-months">
               {months.map((month) => (
