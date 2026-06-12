@@ -101,10 +101,6 @@ function storedView(): ViewSlug {
   return saved || "combined";
 }
 
-function storedStatus(): BudgetLineStatus {
-  return localStorage.getItem("budget-tracker-default-status") === "planned" ? "planned" : "paid";
-}
-
 function storedTheme(): Theme {
   return localStorage.getItem("budget-tracker-theme") === "dark" ? "dark" : "light";
 }
@@ -140,6 +136,10 @@ function userIcon(users: User[], userId: UserSlug): string {
   return user?.icon || user?.name?.slice(0, 1) || fallbackUserName(userId).slice(0, 1);
 }
 
+function defaultLineStatusForPeriod(period: string): BudgetLineStatus {
+  return period <= currentPeriod() ? "paid" : "planned";
+}
+
 export function App() {
   const [view, setView] = useState<ViewSlug>(storedView);
   const [users, setUsers] = useState<User[]>([]);
@@ -161,7 +161,6 @@ export function App() {
   const [heroDrilldown, setHeroDrilldown] = useState<keyof Summary["totals"] | "debt_balance" | "savings_balance" | null>(null);
   const [soloTab, setSoloTab] = useState<"budget" | "savings" | "debts">("budget");
   const [incomeOpen, setIncomeOpen] = useState(false);
-  const [defaultStatus, setDefaultStatus] = useState<BudgetLineStatus>(storedStatus);
   const [theme, setTheme] = useState<Theme>(storedTheme);
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const aiImportInputRef = useRef<HTMLInputElement | null>(null);
@@ -173,7 +172,7 @@ export function App() {
   const [aiImportStatus, setAiImportStatus] = useState("");
 
   const [incomeForm, setIncomeForm] = useState({ name: "", amount: "", is_static: false });
-  const [lineForm, setLineForm] = useState({ name: "", amount: "", due_day: "", is_static: false, linked_debt_id: "", linked_savings_pot_id: "" });
+  const [lineForm, setLineForm] = useState({ name: "", amount: "", due_day: "", status: defaultLineStatusForPeriod(period), is_static: false, linked_debt_id: "", linked_savings_pot_id: "" });
   const [debtForm, setDebtForm] = useState({ name: "", starting_balance: "" });
   const [potForm, setPotForm] = useState({ name: "", starting_balance: "", target_amount: "" });
   const [profileForm, setProfileForm] = useState({ name: "", icon: "", salary: "" });
@@ -227,10 +226,6 @@ export function App() {
     localStorage.setItem("budget-tracker-view", view);
     void loadAll();
   }, [view, period]);
-
-  useEffect(() => {
-    localStorage.setItem("budget-tracker-default-status", defaultStatus);
-  }, [defaultStatus]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -489,7 +484,7 @@ export function App() {
   }
 
   function openBudgetModal(type: BudgetLineType, title?: string, name = "") {
-    setLineForm({ name, amount: "", due_day: "", is_static: false, linked_debt_id: "", linked_savings_pot_id: "" });
+    setLineForm({ name, amount: "", due_day: "", status: defaultLineStatusForPeriod(period), is_static: false, linked_debt_id: "", linked_savings_pot_id: "" });
     setModal({ kind: "budget", type, title });
     setAddMenuOpen(false);
   }
@@ -577,7 +572,7 @@ export function App() {
       <section className="metrics" aria-label="Budget totals">
         <Metric icon={<Banknote />} label="Income" value={summary.totals.income} onClick={view === "combined" ? () => setHeroDrilldown("income") : () => setIncomeOpen(true)} />
         <Metric icon={<WalletCards />} label="Outgoings" value={summary.totals.outgoings} onClick={view === "combined" ? () => setHeroDrilldown("outgoings") : undefined} />
-        <Metric icon={<PiggyBank />} label="Savings" value={savingsOverviewTotal || summary.totals.savings_contributions} onClick={view === "combined" ? () => setHeroDrilldown("savings_balance") : undefined} />
+        <Metric icon={<PiggyBank />} label="Savings" value={savingsOverviewTotal} onClick={view === "combined" ? () => setHeroDrilldown("savings_balance") : undefined} />
         <Metric icon={<Check />} label="Leftover" value={summary.totals.leftover} emphasis={summary.totals.leftover >= 0 ? "good" : "bad"} onClick={view === "combined" ? () => setHeroDrilldown("leftover") : undefined} />
       </section>
 
@@ -680,7 +675,7 @@ export function App() {
                     name: lineForm.name,
                     amount: Number(lineForm.amount),
                     due_day: lineForm.due_day ? Number(lineForm.due_day) : null,
-                    status: defaultStatus,
+                    status: lineForm.status,
                     is_static: lineForm.is_static,
                     linked_debt_id: lineForm.linked_debt_id ? Number(lineForm.linked_debt_id) : null,
                     linked_savings_pot_id: lineForm.linked_savings_pot_id ? Number(lineForm.linked_savings_pot_id) : null,
@@ -704,8 +699,34 @@ export function App() {
                   {potsForActiveUser.map((pot) => <option key={pot.id} value={pot.id}>{pot.name}</option>)}
                 </select>
               )}
+              <div className="status-toggle" aria-label="Payment status">
+                <button
+                  type="button"
+                  className={lineForm.status === "paid" ? "active" : ""}
+                  aria-pressed={lineForm.status === "paid"}
+                  onClick={() => setLineForm({ ...lineForm, status: "paid" })}
+                >
+                  <Check size={16} />
+                  <span>
+                    <strong>Paid now</strong>
+                    <small>Affects balances</small>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={lineForm.status === "planned" ? "active" : ""}
+                  aria-pressed={lineForm.status === "planned"}
+                  onClick={() => setLineForm({ ...lineForm, status: "planned" })}
+                >
+                  <CalendarPlus size={16} />
+                  <span>
+                    <strong>Planned</strong>
+                    <small>No balance change</small>
+                  </span>
+                </button>
+              </div>
               <label className="checkline"><input type="checkbox" checked={lineForm.is_static} onChange={(event) => setLineForm({ ...lineForm, is_static: event.target.checked })} /> Static / recurring</label>
-              <p className="form-hint">New budget lines are currently saved as {defaultStatus}.</p>
+              <p className="form-hint">{period > currentPeriod() ? "Future-month entries start as planned so savings and debt balances do not move early." : "Current-month entries start as paid. Use Planned for anything not paid yet."}</p>
               <button className="primary-button">Save {lineTypes.find((item) => item.id === modal.type)?.button}</button>
             </form>
           )}
@@ -897,10 +918,6 @@ export function App() {
                 <strong>Add family member</strong>
               </button>
             </div>
-            <label className="setting-row">
-              <span>New budget lines default to paid</span>
-              <input type="checkbox" checked={defaultStatus === "paid"} onChange={(event) => setDefaultStatus(event.target.checked ? "paid" : "planned")} />
-            </label>
             <label className="setting-row">
               <span>{theme === "dark" ? "Dark mode" : "Light mode"}</span>
               <button className="icon-text" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>

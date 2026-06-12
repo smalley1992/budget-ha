@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.8 - 2026-06-13
+
+- Added a per-entry Paid now / Planned control to the add budget line form.
+- Defaulted current and past month entries to paid, and future month entries to planned.
+- Removed the global "new budget lines default to paid" setting to avoid future savings/debt entries changing balances early.
+- Kept the top Savings card tied to actual savings pot balance instead of planned monthly savings lines.
+
 ## 0.5.7 - 2026-06-12
 
 - Replaced the hidden native month input with an app-owned month picker.
