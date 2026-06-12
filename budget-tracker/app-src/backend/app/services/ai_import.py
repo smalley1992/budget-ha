@@ -2,6 +2,7 @@ import base64
 import json
 import logging
 import re
+import time
 import urllib.error
 import urllib.request
 from typing import Any
@@ -11,6 +12,9 @@ from fastapi import HTTPException, UploadFile
 from ..config import get_settings
 
 logger = logging.getLogger("app.ai_import")
+
+RETRYABLE_GOOGLE_STATUS_CODES = {429, 500, 502, 503, 504}
+GOOGLE_AI_MAX_ATTEMPTS = 3
 
 
 ALLOWED_AI_IMPORT_TYPES = {
@@ -94,7 +98,7 @@ Rules:
 - If the document is a bill with one total due, create or update one bill line.
 - For utility bills (e.g. energy bills like Octopus) or recurring bills paid by Direct Debit, extract the regular monthly Direct Debit / collection payment amount rather than the closing account balance or total outstanding account balance.
 - If an existing budget line looks like the same obligation, set action to update_existing and match_existing_line_id.
-- A same obligation can be an approximate merchant match plus amount within £1.50. Example: existing "Water" 52 and document "North Water" 51.99 is likely the same line.
+- A same obligation can be an approximate merchant match plus amount within GBP 1.50. Example: existing "Water" 52 and document "North Water" 51.99 is likely the same line.
 - Payments to credit cards, lenders, or names like MBNA, Barclaycard, Capital One, Amex, Mastercard, Visa are usually type debt_payment. Link to a matching debt if present.
 - Transfers to savings accounts or pots are usually savings_contribution. Link to a matching savings pot if present.
 - Groceries, retail, food, fuel, travel, subscriptions, and card purchases are usually expense.
@@ -141,8 +145,7 @@ def _extract_json(text: str) -> dict[str, Any]:
         return parsed
     except json.JSONDecodeError as exc:
         logger.error(f"AI response was not valid JSON: {str(exc)}")
-        snippet = trimmed[:1000] + "..." if len(trimmed) > 1000 else trimmed
-        logger.error(f"Raw response text snippet (first 1000 chars): {snippet}")
+        logger.error(f"Raw response text was not logged because uploaded documents can contain financial data. Length: {len(trimmed)} characters.")
         raise HTTPException(status_code=502, detail="AI response was not valid JSON") from exc
 
 
@@ -172,37 +175,59 @@ def call_google_ai(api_key: str, model: str, prompt: str, mime_type: str, conten
     model_path = model if model.startswith("models/") else f"models/{model}"
     request_url = f"https://generativelanguage.googleapis.com/v1beta/{model_path}:generateContent"
     
-    logger.info(f"Sending POST request to Generative Language API endpoint for model: {model}")
-    
-    import time
-    start_time = time.time()
-    
-    request = urllib.request.Request(
-        request_url,
-        data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-        method="POST",
-    )
-    
-    try:
-        with urllib.request.urlopen(request, timeout=90) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-            elapsed = time.time() - start_time
-            logger.info(f"API request completed successfully in {elapsed:.2f} seconds.")
-    except urllib.error.HTTPError as exc:
-        elapsed = time.time() - start_time
+    request_data = json.dumps(body).encode("utf-8")
+    last_message = "Google AI request failed"
+
+    for attempt in range(1, GOOGLE_AI_MAX_ATTEMPTS + 1):
+        logger.info(f"Sending POST request to Generative Language API endpoint for model: {model} (attempt {attempt}/{GOOGLE_AI_MAX_ATTEMPTS})")
+        start_time = time.time()
+        request = urllib.request.Request(
+            request_url,
+            data=request_data,
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+            method="POST",
+        )
+
         try:
-            error_body = exc.read().decode("utf-8")
-            error_payload = json.loads(error_body)
-            message = error_payload.get("error", {}).get("message", "Google AI request failed")
-        except Exception:
-            message = "Google AI request failed"
-        logger.error(f"Google AI API request failed with HTTP status {exc.code} after {elapsed:.2f} seconds. Error: {message}")
-        raise HTTPException(status_code=502, detail=message) from exc
-    except (urllib.error.URLError, TimeoutError) as exc:
-        elapsed = time.time() - start_time
-        logger.error(f"Google AI API request failed/timed out after {elapsed:.2f} seconds: {str(exc)}")
-        raise HTTPException(status_code=502, detail="Google AI request failed") from exc
+            with urllib.request.urlopen(request, timeout=90) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+                elapsed = time.time() - start_time
+                logger.info(f"API request completed successfully in {elapsed:.2f} seconds on attempt {attempt}.")
+                break
+        except urllib.error.HTTPError as exc:
+            elapsed = time.time() - start_time
+            try:
+                error_body = exc.read().decode("utf-8")
+                error_payload = json.loads(error_body)
+                last_message = error_payload.get("error", {}).get("message", "Google AI request failed")
+            except Exception:
+                last_message = "Google AI request failed"
+
+            retryable = exc.code in RETRYABLE_GOOGLE_STATUS_CODES and attempt < GOOGLE_AI_MAX_ATTEMPTS
+            log_method = logger.warning if retryable else logger.error
+            log_method(
+                f"Google AI API request failed with HTTP status {exc.code} after {elapsed:.2f} seconds "
+                f"on attempt {attempt}/{GOOGLE_AI_MAX_ATTEMPTS}. Error: {last_message}"
+            )
+            if retryable:
+                time.sleep(1.5 * attempt)
+                continue
+            raise HTTPException(status_code=502, detail=f"{last_message} Try again in a moment.") from exc
+        except (urllib.error.URLError, TimeoutError) as exc:
+            elapsed = time.time() - start_time
+            last_message = "Google AI request failed"
+            retryable = attempt < GOOGLE_AI_MAX_ATTEMPTS
+            log_method = logger.warning if retryable else logger.error
+            log_method(
+                f"Google AI API request failed/timed out after {elapsed:.2f} seconds "
+                f"on attempt {attempt}/{GOOGLE_AI_MAX_ATTEMPTS}: {str(exc)}"
+            )
+            if retryable:
+                time.sleep(1.5 * attempt)
+                continue
+            raise HTTPException(status_code=502, detail="Google AI request failed. Try again in a moment.") from exc
+    else:
+        raise HTTPException(status_code=502, detail=f"{last_message} Try again in a moment.")
 
     parts = payload.get("candidates", [{}])[0].get("content", {}).get("parts", [])
     # Filter out parts marked as thought/reasoning (where part.get("thought") is truthy)

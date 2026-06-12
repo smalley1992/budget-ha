@@ -1,4 +1,5 @@
 from collections.abc import Generator
+import io
 
 import pytest
 from fastapi import HTTPException
@@ -11,7 +12,8 @@ from app.database import Base, get_db
 from app.main import app
 from app.routers import ai_import
 from app.routers.backups import _validate_sqlite_backup
-from app.services.ai_import import validate_ai_import_file
+from app.services import ai_import as ai_import_service
+from app.services.ai_import import call_google_ai, validate_ai_import_file
 from app.services.common import seed_default_categories
 
 
@@ -345,3 +347,37 @@ def test_ai_import_rejects_unsupported_upload_type() -> None:
 
     with pytest.raises(HTTPException):
         validate_ai_import_file(FakeUpload(), 10)  # type: ignore[arg-type]
+
+
+def test_google_ai_retries_transient_server_errors(monkeypatch) -> None:
+    attempts = {"count": 0}
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return b'{"candidates":[{"content":{"parts":[{"text":"{\\"document_type\\":\\"receipt\\",\\"summary\\":\\"ok\\",\\"proposals\\":[]}"}]}}]}'
+
+    def fake_urlopen(request, timeout):
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise ai_import_service.urllib.error.HTTPError(
+                request.full_url,
+                500,
+                "Internal error encountered.",
+                hdrs=None,
+                fp=io.BytesIO(b'{"error":{"message":"Internal error encountered."}}'),
+            )
+        return FakeResponse()
+
+    monkeypatch.setattr(ai_import_service.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(ai_import_service.time, "sleep", lambda seconds: None)
+
+    result = call_google_ai("test-key", "gemma-4-31b-it", "prompt", "image/jpeg", b"image")
+
+    assert attempts["count"] == 2
+    assert result["document_type"] == "receipt"
