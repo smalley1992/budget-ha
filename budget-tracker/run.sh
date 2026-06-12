@@ -36,10 +36,26 @@ else:
 PY
 )"
 
+GOOGLE_AI_MODEL="$(python - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("/data/options.json")
+if path.exists():
+    try:
+        print(json.loads(path.read_text()).get("google_ai_model", "gemma-4-26b-a4b-it"))
+    except Exception:
+        print("gemma-4-26b-a4b-it")
+else:
+    print("gemma-4-26b-a4b-it")
+PY
+)"
+
 export DATABASE_URL="${DATABASE_URL:-sqlite:///${APP_DATA_DIR}/data/budget_tracker.db}"
 export UPLOAD_DIR="${UPLOAD_DIR:-${APP_DATA_DIR}/uploads}"
 export MAX_UPLOAD_MB
 export GOOGLE_AI_API_KEY
+export GOOGLE_AI_MODEL
 export FRONTEND_DIST_DIR="${FRONTEND_DIST_DIR:-/app/frontend}"
 export FRONTEND_ORIGIN="${FRONTEND_ORIGIN:-http://localhost:8099}"
 

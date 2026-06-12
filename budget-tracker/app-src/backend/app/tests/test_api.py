@@ -381,3 +381,38 @@ def test_google_ai_retries_transient_server_errors(monkeypatch) -> None:
 
     assert attempts["count"] == 2
     assert result["document_type"] == "receipt"
+
+
+def test_google_ai_falls_back_when_gemma_31b_keeps_failing(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return b'{"candidates":[{"content":{"parts":[{"text":"{\\"document_type\\":\\"receipt\\",\\"summary\\":\\"fallback\\",\\"proposals\\":[]}"}]}}]}'
+
+    def fake_urlopen(request, timeout):
+        if "gemma-4-31b-it" in request.full_url:
+            calls.append("gemma-4-31b-it")
+            raise ai_import_service.urllib.error.HTTPError(
+                request.full_url,
+                500,
+                "Internal error encountered.",
+                hdrs=None,
+                fp=io.BytesIO(b'{"error":{"message":"Internal error encountered."}}'),
+            )
+        calls.append("gemma-4-26b-a4b-it")
+        return FakeResponse()
+
+    monkeypatch.setattr(ai_import_service.urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(ai_import_service.time, "sleep", lambda seconds: None)
+
+    result = call_google_ai("test-key", "gemma-4-31b-it", "prompt", "image/jpeg", b"image")
+
+    assert calls == ["gemma-4-31b-it", "gemma-4-31b-it", "gemma-4-31b-it", "gemma-4-26b-a4b-it"]
+    assert result["summary"] == "fallback"

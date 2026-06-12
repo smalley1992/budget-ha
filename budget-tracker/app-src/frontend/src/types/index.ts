@@ -90,6 +90,9 @@ export type AiImportItemKind = "budget" | "income";
 export interface AiImportConfig {
   configured: boolean;
   model: string;
+  default_model: string;
+  models: { id: string; label: string; free_tier: string; note: string }[];
+  rate_limit_note: string;
   daily_request_design: string;
 }
 

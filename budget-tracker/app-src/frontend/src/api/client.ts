@@ -92,11 +92,12 @@ export const api = {
     return request<{ ok: boolean; message: string }>("/backups/database/import", { method: "POST", body: form });
   },
   aiImportConfig: () => request<AiImportConfig>("/ai-import/config"),
-  previewAiImport: (file: File, period: string, view: ViewSlug, apiKey: string) => {
+  previewAiImport: (file: File, period: string, view: ViewSlug, apiKey: string, model: string) => {
     const form = new FormData();
     form.append("period", period);
     form.append("view", view);
     form.append("api_key", apiKey);
+    form.append("model", model);
     form.append("file", file);
     return request<AiImportPreview>("/ai-import/preview", { method: "POST", body: form });
   },

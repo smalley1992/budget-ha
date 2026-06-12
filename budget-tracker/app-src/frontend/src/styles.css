@@ -112,12 +112,12 @@ button:disabled {
 }
 
 .topbar-controls {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto 44px;
   align-items: center;
   gap: 8px;
   max-width: 100%;
   min-width: 0;
-  flex-wrap: wrap;
   justify-content: flex-end;
   padding: 8px;
   border: 1px solid var(--border);
@@ -150,29 +150,18 @@ button:disabled {
 .month-control {
   position: relative;
   display: inline-grid;
-  grid-template-columns: auto minmax(132px, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 8px;
   min-height: 40px;
-  padding-left: 10px;
+  padding: 0 10px;
   border: 1px solid var(--field-border);
   border-radius: 8px;
   background: var(--field);
-}
-
-.month-control span,
-.month-control strong {
-  color: var(--muted);
-}
-
-.month-control span {
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: uppercase;
+  overflow: hidden;
 }
 
 .month-control strong {
-  display: none;
   min-width: 0;
   color: var(--text);
   overflow: hidden;
@@ -181,10 +170,15 @@ button:disabled {
 }
 
 .month-control input {
+  position: absolute;
+  inset: 0;
   min-width: 0;
-  min-height: 38px;
+  height: 100%;
+  min-height: 0;
   border: 0;
   background: transparent;
+  cursor: pointer;
+  opacity: 0;
 }
 
 input,
@@ -326,6 +320,12 @@ input[type="checkbox"] {
 
 :root[data-theme="dark"] .primary-button {
   color: #07131a;
+}
+
+.viewbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: -6px 0 14px;
 }
 
 .danger {
@@ -1170,6 +1170,42 @@ td select {
   text-align: left;
 }
 
+.settings-field {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-field span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.model-limit-list {
+  display: grid;
+  gap: 8px;
+}
+
+.model-limit {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--panel-soft);
+}
+
+.model-limit.active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel-soft));
+}
+
+.model-limit span,
+.model-limit small {
+  color: var(--muted);
+}
+
 .setting-action {
   cursor: pointer;
 }
@@ -1424,39 +1460,29 @@ td select {
     display: none;
   }
 
+  .viewbar {
+    justify-content: stretch;
+    margin: -2px 0 12px;
+  }
+
   .topbar-controls {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 44px 44px;
+    grid-template-columns: minmax(0, 45fr) minmax(0, 45fr) minmax(40px, 10fr);
     width: 100%;
     align-items: stretch;
     justify-content: stretch;
     gap: 8px;
-    overflow: visible;
-    flex-wrap: initial;
-  }
-
-  .month-control {
-    grid-column: 1;
-    width: 100%;
-    min-width: 0;
-    grid-template-columns: auto minmax(0, 1fr);
-    padding: 8px 10px;
     overflow: hidden;
   }
 
-  .month-control strong {
-    display: block;
+  .month-control {
+    width: 100%;
+    min-width: 0;
+    padding: 8px 10px;
   }
 
   .month-control input {
-    position: absolute;
-    inset: 0;
-    height: 100%;
-    min-height: 0;
     padding: 0;
-    opacity: 0;
     width: 100%;
-    cursor: pointer;
   }
 
   .workspace,
@@ -1574,9 +1600,7 @@ td select {
   }
 
   .user-switcher {
-    grid-column: 1 / -1;
     width: 100%;
-    flex: initial;
     flex-wrap: wrap;
     justify-content: flex-start;
     border-radius: 14px;
@@ -1590,18 +1614,22 @@ td select {
 
   .topbar-controls > .icon-text,
   .topbar-controls > .icon-button {
-    width: 44px;
-    min-width: 44px;
+    width: 100%;
+    min-width: 0;
     padding: 8px;
   }
 
   .topbar-controls > .icon-text {
-    font-size: 0;
-    gap: 0;
+    font-size: 13px;
+    gap: 6px;
+    justify-content: center;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.1;
   }
 
   .topbar-controls > .icon-text svg {
-    flex: 0 0 auto;
+    display: none;
   }
 
   .section-tabs {

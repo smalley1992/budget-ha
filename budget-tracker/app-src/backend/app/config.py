@@ -19,7 +19,7 @@ class Settings:
         self.max_upload_mb = int(os.getenv("MAX_UPLOAD_MB", "10"))
         self.frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
         self.google_ai_api_key = os.getenv("GOOGLE_AI_API_KEY") or os.getenv("GOOGLE_GENAI_API_KEY") or ""
-        self.google_ai_model = os.getenv("GOOGLE_AI_MODEL") or os.getenv("GOOGLE_GENAI_MODEL") or "gemma-4-31b-it"
+        self.google_ai_model = os.getenv("GOOGLE_AI_MODEL") or os.getenv("GOOGLE_GENAI_MODEL") or "gemma-4-26b-a4b-it"
         frontend_dist_dir = os.getenv("FRONTEND_DIST_DIR", "")
         self.frontend_dist_dir = Path(frontend_dist_dir) if frontend_dist_dir else None
 

@@ -11,6 +11,8 @@ budget-tracker/app-src/uploads/*
 !budget-tracker/app-src/uploads/.gitkeep
 frontend/node_modules/
 frontend/dist/
+budget-tracker/app-src/frontend/node_modules/
+budget-tracker/app-src/frontend/dist/
 frontend-vite*.log
 production-smoke*.log
 snapshots/

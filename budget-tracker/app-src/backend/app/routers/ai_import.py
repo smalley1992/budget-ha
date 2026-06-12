@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from .. import models
 from ..config import get_settings
 from ..database import get_db
-from ..services.ai_import import build_import_prompt, call_google_ai, validate_ai_import_file
+from ..services.ai_import import build_import_prompt, call_google_ai, normalize_google_ai_model, validate_ai_import_file
 from ..services.serializers import budget_line_out, debt_out, savings_pot_out
 
 
@@ -18,9 +18,32 @@ logger = logging.getLogger("app.ai_import")
 @router.get("/config")
 def ai_import_config() -> dict:
     settings = get_settings()
+    configured_model = normalize_google_ai_model(settings.google_ai_model)
     return {
         "configured": bool(settings.google_ai_api_key.strip()),
-        "model": settings.google_ai_model,
+        "model": configured_model,
+        "default_model": "gemma-4-26b-a4b-it",
+        "models": [
+            {
+                "id": "gemma-4-26b-a4b-it",
+                "label": "Gemma 4 26B",
+                "free_tier": "Free tier eligible; active RPM/TPM/RPD limits are shown in Google AI Studio.",
+                "note": "Recommended fallback while 31B is returning Google 500 errors.",
+            },
+            {
+                "id": "gemma-4-31b-it",
+                "label": "Gemma 4 31B",
+                "free_tier": "Free tier eligible; active RPM/TPM/RPD limits are shown in Google AI Studio.",
+                "note": "Higher quality target; automatically falls back to Gemma 4 26B on retryable Google server failures.",
+            },
+            {
+                "id": "gemini-2.5-flash",
+                "label": "Gemini 2.5 Flash",
+                "free_tier": "Free tier eligible; active RPM/TPM/RPD limits are shown in Google AI Studio.",
+                "note": "Fast control option. Check pricing/data terms before regular use.",
+            },
+        ],
+        "rate_limit_note": "Google applies Gemini API limits per project and model across RPM, TPM, and RPD. Exact free-tier limits can change and should be checked in Google AI Studio.",
         "daily_request_design": "one request per uploaded document",
     }
 
@@ -61,6 +84,7 @@ async def preview_ai_import(
     period: str = Form(...),
     view: str = Form("combined"),
     api_key: str = Form(""),
+    model: str = Form(""),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> dict:
@@ -74,7 +98,7 @@ async def preview_ai_import(
     result = await asyncio.to_thread(
         call_google_ai,
         api_key.strip() or settings.google_ai_api_key,
-        settings.google_ai_model,
+        model.strip() or settings.google_ai_model,
         prompt,
         mime_type,
         content

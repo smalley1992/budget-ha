@@ -63,6 +63,14 @@ function nextPeriod(period: string): string {
   return `${year}-${String(month).padStart(2, "0")}`;
 }
 
+function monthLabel(period: string): string {
+  const [year, month] = period.split("-").map(Number);
+  if (!year || !month) {
+    return period;
+  }
+  return new Intl.DateTimeFormat("en-GB", { month: "long" }).format(new Date(year, month - 1, 1));
+}
+
 function money(value: number): string {
   return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(value);
 }
@@ -85,6 +93,10 @@ function storedStatus(): BudgetLineStatus {
 
 function storedTheme(): Theme {
   return localStorage.getItem("budget-tracker-theme") === "dark" ? "dark" : "light";
+}
+
+function storedAiModel(): string {
+  return localStorage.getItem("budget-tracker-ai-model") || "gemma-4-26b-a4b-it";
 }
 
 function lineLabel(type: BudgetLineType): string {
@@ -139,6 +151,7 @@ export function App() {
   const aiImportInputRef = useRef<HTMLInputElement | null>(null);
   const [aiConfig, setAiConfig] = useState<AiImportConfig | null>(null);
   const [aiApiKey, setAiApiKey] = useState(() => localStorage.getItem("budget-tracker-ai-api-key") || "");
+  const [aiModel, setAiModel] = useState(storedAiModel);
   const [aiReview, setAiReview] = useState<{ summary: string; documentType: string; proposals: AiImportProposal[] } | null>(null);
   const [aiImportLoading, setAiImportLoading] = useState(false);
   const [aiImportStatus, setAiImportStatus] = useState("");
@@ -210,9 +223,18 @@ export function App() {
 
   useEffect(() => {
     api.aiImportConfig()
-      .then(setAiConfig)
+      .then((config) => {
+        setAiConfig(config);
+        if (!localStorage.getItem("budget-tracker-ai-model")) {
+          setAiModel(config.model || config.default_model || "gemma-4-26b-a4b-it");
+        }
+      })
       .catch(() => setAiConfig(null));
   }, []);
+
+  useEffect(() => {
+    localStorage.setItem("budget-tracker-ai-model", aiModel);
+  }, [aiModel]);
 
   async function run(action: () => Promise<unknown>, done = "Saved") {
     setBusy(true);
@@ -308,7 +330,7 @@ export function App() {
         }
       }
       setAiImportStatus("Calling AI to analyze document...");
-      const preview = await api.previewAiImport(fileToSend, period, view, aiApiKey.trim());
+      const preview = await api.previewAiImport(fileToSend, period, view, aiApiKey.trim(), aiModel);
       setAiReview({
         summary: preview.summary,
         documentType: preview.document_type,
@@ -350,7 +372,7 @@ export function App() {
         }
       }
       setMessage("Calling AI to analyze document...");
-      const preview = await api.previewAiImport(fileToSend, period, view, aiApiKey.trim());
+      const preview = await api.previewAiImport(fileToSend, period, view, aiApiKey.trim(), aiModel);
       setAiReview({
         summary: preview.summary,
         documentType: preview.document_type,
@@ -461,8 +483,7 @@ export function App() {
         </div>
         <div className="topbar-controls">
           <label className="month-control">
-            <span>Month</span>
-            <strong>{period}</strong>
+            <strong>{monthLabel(period)}</strong>
             <input list="known-months" type="month" value={period} onChange={(event) => setPeriod(event.target.value)} aria-label="Month" />
             <datalist id="known-months">
               {months.map((month) => (
@@ -470,16 +491,21 @@ export function App() {
               ))}
             </datalist>
           </label>
-          <UserSwitcher users={users} view={view} onChange={setView} />
           <button className="icon-text" disabled={busy} onClick={() => void run(() => api.rollover(period, nextPeriod(period)), `Rolled into ${nextPeriod(period)}`)} title="Create next month">
             <CalendarPlus size={18} />
-            Next month
+            Next Month
           </button>
           <button className="icon-button" disabled={busy} onClick={() => setShowSettings(true)} title="Settings">
             <Settings size={18} />
           </button>
         </div>
       </header>
+
+      {users.length > 0 && (
+        <div className="viewbar">
+          <UserSwitcher users={users} view={view} onChange={setView} />
+        </div>
+      )}
 
       {message && <div className="notice">{message}</div>}
 
@@ -876,6 +902,45 @@ export function App() {
                 }}
                 autoComplete="off"
               />
+              <label className="settings-field">
+                <span>Model</span>
+                <select
+                  value={aiConfig?.models.some((modelOption) => modelOption.id === aiModel) ? aiModel : "custom"}
+                  onChange={(event) => {
+                    if (event.target.value === "custom") {
+                      setAiModel("");
+                      return;
+                    }
+                    setAiModel(event.target.value);
+                  }}
+                >
+                  {(aiConfig?.models ?? []).map((modelOption) => (
+                    <option key={modelOption.id} value={modelOption.id}>{modelOption.label}</option>
+                  ))}
+                  <option value="custom">Custom model id</option>
+                </select>
+              </label>
+              {(!aiConfig?.models.some((modelOption) => modelOption.id === aiModel) || !aiModel) && (
+                <label className="settings-field">
+                  <span>Custom model id</span>
+                  <input
+                    value={aiModel}
+                    onChange={(event) => setAiModel(event.target.value)}
+                    placeholder={aiConfig?.model || "gemma-4-26b-a4b-it"}
+                    autoComplete="off"
+                  />
+                </label>
+              )}
+              <div className="model-limit-list">
+                {(aiConfig?.models ?? []).map((modelOption) => (
+                  <div className={`model-limit ${modelOption.id === aiModel ? "active" : ""}`} key={modelOption.id}>
+                    <strong>{modelOption.label}</strong>
+                    <span>{modelOption.free_tier}</span>
+                    <small>{modelOption.note}</small>
+                  </div>
+                ))}
+              </div>
+              <p className="form-hint">{aiConfig?.rate_limit_note || "Google API limits vary by project, model, and tier. Check Google AI Studio for live free-tier quotas."}</p>
               <button className="setting-row setting-action" disabled={busy} onClick={() => aiImportInputRef.current?.click()}>
                 <span>Upload bill, receipt, or statement</span>
                 <FileSearch size={16} />

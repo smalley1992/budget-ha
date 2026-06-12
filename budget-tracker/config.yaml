@@ -1,6 +1,6 @@
 name: Budget Local
 slug: budget_tracker
-version: "0.5.3"
+version: "0.5.4"
 description: Self-hosted family budgeting app for monthly income, outgoings, savings, and debts.
 arch:
   - amd64
@@ -16,6 +16,8 @@ panel_title: Budget
 options:
   max_upload_mb: 10
   google_ai_api_key: ""
+  google_ai_model: "gemma-4-26b-a4b-it"
 schema:
   max_upload_mb: "int(1,100)"
   google_ai_api_key: "password?"
+  google_ai_model: "str?"

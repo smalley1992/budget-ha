@@ -15,6 +15,11 @@ logger = logging.getLogger("app.ai_import")
 
 RETRYABLE_GOOGLE_STATUS_CODES = {429, 500, 502, 503, 504}
 GOOGLE_AI_MAX_ATTEMPTS = 3
+DEFAULT_GOOGLE_AI_MODEL = "gemma-4-26b-a4b-it"
+GOOGLE_AI_MODEL_FALLBACKS = {
+    "gemma-4-31b-it": ["gemma-4-26b-a4b-it"],
+}
+GOOGLE_AI_MODEL_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
 
 
 ALLOWED_AI_IMPORT_TYPES = {
@@ -149,7 +154,26 @@ def _extract_json(text: str) -> dict[str, Any]:
         raise HTTPException(status_code=502, detail="AI response was not valid JSON") from exc
 
 
-def call_google_ai(api_key: str, model: str, prompt: str, mime_type: str, content: bytes) -> dict[str, Any]:
+def normalize_google_ai_model(model: str) -> str:
+    model_id = model.strip()
+    if model_id.startswith("models/"):
+        model_id = model_id.removeprefix("models/")
+    if not model_id:
+        model_id = DEFAULT_GOOGLE_AI_MODEL
+    if not GOOGLE_AI_MODEL_ID_PATTERN.fullmatch(model_id):
+        logger.error("Google AI model validation failed: invalid model id.")
+        raise HTTPException(status_code=400, detail="Google AI model id is invalid")
+    return model_id
+
+
+def _google_ai_model_attempts(model: str) -> list[str]:
+    model_id = normalize_google_ai_model(model)
+    attempts = [model_id]
+    attempts.extend(fallback for fallback in GOOGLE_AI_MODEL_FALLBACKS.get(model_id, []) if fallback not in attempts)
+    return attempts
+
+
+def _call_google_ai_model(api_key: str, model: str, prompt: str, mime_type: str, content: bytes) -> dict[str, Any]:
     if not api_key.strip():
         logger.error("API key validation failed: empty API key.")
         raise HTTPException(status_code=400, detail="Google AI API key is required")
@@ -172,8 +196,7 @@ def call_google_ai(api_key: str, model: str, prompt: str, mime_type: str, conten
             "responseMimeType": "application/json",
         },
     }
-    model_path = model if model.startswith("models/") else f"models/{model}"
-    request_url = f"https://generativelanguage.googleapis.com/v1beta/{model_path}:generateContent"
+    request_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
     
     request_data = json.dumps(body).encode("utf-8")
     last_message = "Google AI request failed"
@@ -239,3 +262,22 @@ def call_google_ai(api_key: str, model: str, prompt: str, mime_type: str, conten
     
     logger.info(f"AI response candidate text size: {len(text)} characters.")
     return _extract_json(text)
+
+
+def call_google_ai(api_key: str, model: str, prompt: str, mime_type: str, content: bytes) -> dict[str, Any]:
+    model_attempts = _google_ai_model_attempts(model)
+    last_error: HTTPException | None = None
+    for index, model_id in enumerate(model_attempts):
+        try:
+            if index > 0:
+                logger.warning(f"Retrying Google AI import with fallback model: {model_id}")
+            return _call_google_ai_model(api_key, model_id, prompt, mime_type, content)
+        except HTTPException as exc:
+            last_error = exc
+            has_fallback = index < len(model_attempts) - 1
+            if not has_fallback or exc.status_code < 500:
+                raise
+            logger.warning(f"Google AI model {model_id} failed with status {exc.status_code}; fallback model will be tried.")
+    if last_error:
+        raise last_error
+    raise HTTPException(status_code=502, detail="Google AI request failed")
