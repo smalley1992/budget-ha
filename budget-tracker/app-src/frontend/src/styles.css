@@ -365,6 +365,7 @@ input[type="checkbox"] {
 }
 
 .metric {
+  color: var(--text);
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--accent) 13%, transparent), transparent 58%),
     var(--panel);
@@ -410,7 +411,7 @@ input[type="checkbox"] {
 }
 
 .metric svg {
-  color: #3d7b69;
+  color: var(--accent);
 }
 
 .metric p {
@@ -419,6 +420,7 @@ input[type="checkbox"] {
 }
 
 .metric strong {
+  color: var(--text);
   font-size: 24px;
 }
 

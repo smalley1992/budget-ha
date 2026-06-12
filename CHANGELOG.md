@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.5 - 2026-06-12
+
+- Fixed dark mode metric/hero card text inheriting browser-default black button text.
+
 ## 0.5.4 - 2026-06-12
 
 - Added Google AI model selection in Settings, including Gemma 4 26B, Gemma 4 31B, Gemini 2.5 Flash, and a custom model id option.
